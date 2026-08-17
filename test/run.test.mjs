@@ -100,7 +100,7 @@ test('a full offline run over all nine companies writes records and a report', a
   // Currency is read off each filing, never assumed: Goodyear India reports to its
   // parent in USD Million and has to survive the run on that basis.
   const byCompany = new Map(payload.records.map((r) => [r.company, r]));
-  assert.deepEqual(byCompany.get('Goodyear India').currency, { code: 'USD', unit: 'Million', fx_to_inr: 83.5 });
+  assert.deepEqual(byCompany.get('Goodyear India').currency, { code: 'USD', unit: 'Million', fx_to_inr: 83 });
   assert.deepEqual(byCompany.get('Apollo Tyres').currency, { code: 'INR', unit: 'Crore', fx_to_inr: 1 });
 
   // Every stored quote is genuinely in the filing text this run retrieved.

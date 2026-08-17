@@ -253,8 +253,8 @@ test('toInrCrore converts across currency and unit combinations', () => {
   assert.equal(TyreCore.toInrCrore(100, { code: 'INR', unit: 'Lakh' }), 1);
   assert.equal(TyreCore.toInrCrore(100, { code: 'INR', unit: 'Million' }), 10);
   assert.equal(TyreCore.toInrCrore(1, { code: 'INR', unit: 'Billion' }), 100);
-  assert.equal(TyreCore.toInrCrore(100, { code: 'USD', unit: 'Million' }), 100 * 83.5 * 0.1);
-  assert.equal(TyreCore.toInrCrore(-50, { code: 'USD', unit: 'Million' }), -50 * 83.5 * 0.1);
+  assert.equal(TyreCore.toInrCrore(100, { code: 'USD', unit: 'Million' }), 100 * 83 * 0.1);
+  assert.equal(TyreCore.toInrCrore(-50, { code: 'USD', unit: 'Million' }), -50 * 83 * 0.1);
 
   assert.equal(TyreCore.toInrCrore(100, { code: 'XYZ', unit: 'Crore' }), null, 'unknown currency');
   assert.equal(TyreCore.toInrCrore(100, { code: 'INR', unit: 'Furlong' }), null, 'unknown unit');

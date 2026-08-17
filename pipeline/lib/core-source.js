@@ -67,7 +67,13 @@ var OUTLOOK_KEYS = ['commentary', 'rm_trend', 'capex'];
 // Indicative rates, used only to put every company on one axis for comparison.
 // Reported figures are always kept in their source currency and unit; the
 // normalized value is a derived convenience, never a substitute for the source.
-var FX_TO_INR = { INR: 1, USD: 83.5, EUR: 90.5, GBP: 106.0, JPY: 0.56 };
+var FX_TO_INR = { INR: 1, USD: 83, EUR: 90, GBP: 105, KRW: 0.06, JPY: 0.56, CNY: 11.5 };
+
+// What the dashboard fills in when a filing does not state its scale.
+var DEFAULT_UNIT_FOR_CURRENCY = {
+  INR: 'Crore', USD: 'Million', EUR: 'Million', GBP: 'Million',
+  KRW: 'Billion', JPY: 'Billion', CNY: 'Million'
+};
 
 // Multiplier from one unit into INR crore (1 crore = 10 million).
 var UNIT_TO_CRORE = {
@@ -79,6 +85,7 @@ var UNIT_TO_CRORE = {
   bn: 100,
   billion: 100,
   thousand: 0.0001,
+  actual: 0.0000001,
   unit: 0.0000001,
   '': 1
 };
@@ -398,15 +405,31 @@ function verifyQuotes(rec, sourceText, opts) {
 
 /* ------------------------------------------------------------- comparison -- */
 
-// Quarter labels in this sector look like "Q1 FY26" / "Q3FY2025". Sortable key,
-// or null when the label does not parse — callers fall back to insertion order.
+// Sortable key for a period label, or null when the label does not parse —
+// callers fall back to insertion order.
+//
+// The Indian companies file on a fiscal year ("Q1 FY26", "Q3FY2025", "H1 FY26");
+// the global ones a comparison would pull in file on a calendar year ("Q1 2026",
+// "Q1 CY26"). Both are handled. Note the two are on separate numbering, so a
+// CY-labelled quarter and an FY-labelled quarter covering the same real months do
+// not land on the same key — that ambiguity is inherent in comparing fiscal-year
+// against calendar-year reporters, not something a label parser can resolve.
 function quarterSortKey(quarter) {
-  var m = /q\s*([1-4])\s*[-\s]?fy\s*'?(\d{2,4})/i.exec(String(quarter || ''));
+  if (!quarter) return null;
+  var s = String(quarter).toUpperCase();
+
+  var q = /Q\s*([1-4])/.exec(s);
+  var h = /H\s*([12])/.exec(s);
+  var period = q ? parseInt(q[1], 10) : (h ? parseInt(h[1], 10) * 2 : 0);
+
+  var fy = /FY\s*'?\s*(\d{2,4})/.exec(s);
+  var cy = /CY\s*'?\s*(\d{2,4})/.exec(s) || /\b(20\d{2})\b/.exec(s);
+  var m = fy || cy;
   if (!m) return null;
-  var q = parseInt(m[1], 10);
-  var y = parseInt(m[2], 10);
-  if (y < 100) y += 2000;
-  return y * 10 + q;
+
+  var year = parseInt(m[1], 10);
+  if (year < 100) year += 2000;
+  return year * 10 + period;
 }
 
 // Quarter-over-quarter change per company, on reported values (same currency and
