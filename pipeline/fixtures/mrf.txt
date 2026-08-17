@@ -1,0 +1,113 @@
+*** SYNTHETIC TEST DATA — fixture for offline pipeline runs. Not a real filing. ***
+
+MRF LIMITED
+CIN: L25111TN1960PLC004306
+Registered Office: 114 Greams Road, Chennai 600 006, Tamil Nadu
+
+UNAUDITED STANDALONE FINANCIAL RESULTS FOR THE QUARTER ENDED 30TH JUNE 2025
+(Rs. in Crore, except earnings per share)
+
+                                                        Quarter ended  Quarter ended  Quarter ended
+Particulars                                              30.06.2025     31.03.2025     30.06.2024
+                                                         Unaudited        Audited      Unaudited
+--------------------------------------------------------------------------------------------------
+I    Revenue from operations                               7,412.65       7,188.44       6,842.11
+II   Other income                                            142.30         128.44         118.66
+III  Total income (I+II)                                   7,554.95       7,316.88       6,960.77
+IV   Expenses
+     Cost of materials consumed                            4,121.43       4,039.90       3,722.11
+     Purchases of stock-in-trade                             163.08         150.96         136.84
+     Changes in inventories of finished goods,
+       work-in-progress and stock-in-trade                   (31.08)         20.44         (14.22)
+     Employee benefits expense                               726.44         711.66         656.84
+     Finance costs                                            45.12          47.88          52.10
+     Depreciation and amortisation expense                   396.44         388.15         362.44
+     Other expenses                                        1,335.71       1,252.82       1,152.12
+     Total expenses                                        6,757.14       6,611.81       6,068.23
+V    Profit before tax (III-IV)                              797.81         705.07         892.54
+VI   Tax expense
+     Current tax                                             224.66         195.12         240.30
+     Deferred tax                                            (12.44)         (6.16)         (6.45)
+     Total tax expense                                       212.22         188.96         233.85
+VII  Profit for the period (V-VI)                            585.59         516.11         658.69
+VIII Other comprehensive income (net of tax)                   6.11           4.88          (2.44)
+IX   Total comprehensive income (VII+VIII)                   591.70         520.99         656.25
+X    Paid-up equity share capital
+     (face value Rs. 10 per share)                             4.24           4.24           4.24
+XI   Earnings per share (not annualised)
+     Basic and diluted (Rs.)                               1,380.78       1,216.95       1,553.15
+--------------------------------------------------------------------------------------------------
+
+Note 4
+Earnings before interest, tax, depreciation and amortisation (EBITDA) for the quarter
+ended 30th June 2025 was Rs. 1,097.07 Crore against Rs. 1,012.66 Crore for the quarter
+ended 31st March 2025 and Rs. 1,188.42 Crore for the corresponding quarter of the
+previous year. EBITDA margin for the quarter was 14.8% of revenue from operations
+(previous quarter 14.1%, corresponding quarter of previous year 17.4%).
+
+STATEMENT OF ASSETS AND LIABILITIES (EXTRACT) AS AT 30TH JUNE 2025
+(Rs. in Crore, unaudited)
+--------------------------------------------------------------------------------------------------
+Total assets                                              22,105.88
+Total equity                                              16,842.31
+Total liabilities                                          5,263.57
+Total borrowings                                           1,505.12
+Current assets                                             9,882.14
+     Inventories                                           5,142.77
+     Cash and cash equivalents and bank balances           1,204.66
+Current liabilities                                        4,218.90
+--------------------------------------------------------------------------------------------------
+
+Ratios disclosed for the quarter:
+     Debt-equity ratio                                          0.09
+     Current ratio                                              2.34
+     Quick ratio                                                1.12
+     Interest coverage ratio                                   15.53
+
+CASH FLOW EXTRACT FOR THE QUARTER ENDED 30TH JUNE 2025 (Rs. in Crore, unaudited)
+--------------------------------------------------------------------------------------------------
+Net cash from operating activities                         1,042.55
+Payments for purchase of property, plant and equipment       588.20
+Free cash flow (operating cash flow less capital expenditure)  454.35
+Net cash used in investing activities                       (702.18)
+--------------------------------------------------------------------------------------------------
+
+SEGMENT INFORMATION — QUARTER ENDED 30TH JUNE 2025
+The Company operates in a single reportable business segment, namely automotive tyres,
+tubes and flaps. The following channel and category information is provided voluntarily
+as a percentage of revenue from operations.
+
+Sales channel:
+     Replacement                                                72%
+     Original equipment                                         18%
+     Exports                                                    10%
+
+Product category:
+     Truck and bus radial (TBR)                                 27%
+     Truck and bus bias (TBB)                                    9%
+     Passenger car radial (PCR)                                 24%
+     Two-wheeler (2W)                                           19%
+     Off-highway tyres (OHT)                                    11%
+     Others, including conveyor belting and pretreads           10%
+
+MANAGEMENT DISCUSSION — QUARTER ENDED 30TH JUNE 2025
+Demand in the replacement market held up well across truck and passenger categories, and
+the Company maintained realisations without resorting to discounting. Input costs were the
+principal drag on the quarter: domestic natural rubber traded at a premium to imported
+grades through most of the period, and crude-linked inputs including synthetic rubber and
+carbon black rose sequentially, taking the raw material basket up by close to 4% quarter on
+quarter. The Company expects natural rubber prices to ease modestly with the onset of the
+peak tapping season, though crude-derivative costs are likely to stay firm.
+
+Capital expenditure during the quarter was Rs. 588.20 Crore, primarily towards capacity
+debottlenecking at the Tiruchirappalli and Medak plants and towards the ongoing two-wheeler
+radial expansion. The Company continues to fund its capital expenditure programme from
+internal accruals and expects full-year spend of approximately Rs. 2,200 Crore.
+
+The above unaudited financial results were reviewed by the Audit Committee and taken on
+record by the Board of Directors at their meeting held on 12th August 2025.
+
+By order of the Board
+Chairman and Managing Director
+Chennai
+12th August 2025

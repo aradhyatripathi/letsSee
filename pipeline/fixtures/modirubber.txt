@@ -1,0 +1,84 @@
+*** SYNTHETIC TEST DATA — fixture for offline pipeline runs. Not a real filing. ***
+
+MODI RUBBER LIMITED
+CIN: L25199UP1971PLC003392
+Registered Office: 4/7-B, First Floor, Asaf Ali Road, New Delhi 110 002
+
+UNAUDITED STANDALONE FINANCIAL RESULTS FOR THE QUARTER ENDED 30 JUNE 2025
+(Rs. in Crore, except earnings per share)
+
+Particulars                                                    Quarter ended 30.06.2025
+                                                                     (Unaudited)
+--------------------------------------------------------------------------------------------------
+Revenue from operations                                                  41.86
+Other income                                                              1.55
+Total income                                                             43.41
+Cost of materials consumed                                               13.31
+Purchases of stock-in-trade                                               8.54
+Changes in inventories of finished goods and stock-in-trade               0.62
+Employee benefits expense                                                 6.49
+Finance costs                                                             0.38
+Depreciation and amortisation expense                                     1.24
+Other expenses                                                            8.88
+Total expenses                                                           39.46
+Profit before tax                                                         3.95
+Current tax                                                               1.12
+Deferred tax                                                             (0.15)
+Total tax expense                                                         0.97
+Profit for the period                                                     2.98
+Other comprehensive income (net of tax)                                   0.21
+Total comprehensive income                                                3.19
+Paid-up equity share capital (face value Rs. 10 per share)               25.00
+Earnings per share (not annualised), basic and diluted (Rs.)              1.19
+--------------------------------------------------------------------------------------------------
+
+Note 4
+EBITDA for the quarter ended 30 June 2025 was Rs. 4.02 Crore, representing an EBITDA margin
+of 9.6% of revenue from operations.
+
+STATEMENT OF ASSETS AND LIABILITIES (EXTRACT) AS AT 30 JUNE 2025 — UNAUDITED
+(Rs. in Crore)
+--------------------------------------------------------------------------------------------------
+Total assets                                                            682.44
+Total equity                                                            604.18
+Total liabilities                                                        78.26
+Total borrowings                                                         12.05
+Current assets                                                          402.16
+    Inventories                                                          24.11
+    Cash and cash equivalents and bank balances                         188.42
+Current liabilities                                                      62.88
+--------------------------------------------------------------------------------------------------
+
+RATIOS FOR THE QUARTER
+Debt-equity ratio                                                          0.02
+Current ratio                                                              6.40
+Quick ratio                                                                6.01
+Interest coverage ratio                                                    7.32
+
+CASH FLOW EXTRACT FOR THE QUARTER ENDED 30 JUNE 2025 — UNAUDITED (Rs. in Crore)
+--------------------------------------------------------------------------------------------------
+Net cash generated from operating activities                               3.88
+Purchase of property, plant and equipment                                  1.02
+Free cash flow                                                             2.86
+--------------------------------------------------------------------------------------------------
+
+MANAGEMENT COMMENTARY
+Revenue for the quarter came principally from the tyre trading and distribution business
+and from rental income on the Company's surplus properties. Trading volumes were broadly in
+line with the March quarter. Procurement costs for traded tyres rose during the quarter,
+reflecting the pass-through of higher natural rubber prices and of crude-derivative inputs
+such as carbon black and synthetic rubber by the manufacturers from whom the Company
+sources, and this restricted the trading margin.
+
+Capital expenditure during the quarter was limited to Rs. 1.02 Crore on the refurbishment
+of the Modipuram premises. The Company has no manufacturing capital expenditure programme
+for FY26 and continues to evaluate options for the monetisation of its non-core land
+holdings.
+
+The unaudited financial results were reviewed by the Audit Committee and approved by the
+Board of Directors at its meeting held on 13 August 2025. The statutory auditors have
+carried out a limited review of these results.
+
+For Modi Rubber Limited
+Whole-time Director
+New Delhi, 13 August 2025

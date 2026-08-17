@@ -1,0 +1,108 @@
+*** SYNTHETIC TEST DATA — fixture for offline pipeline runs. Not a real filing. ***
+
+CEAT LIMITED
+CIN: L25100MH1958PLC011041
+Registered Office: RPG House, 463 Dr. Annie Besant Road, Worli, Mumbai 400 030
+
+STATEMENT OF UNAUDITED CONSOLIDATED FINANCIAL RESULTS FOR THE QUARTER ENDED 30 JUNE 2025
+(INR Crore unless otherwise stated)
+
+                                                     Q1 FY26        Q4 FY25        Q1 FY25
+Particulars                                         30.06.2025     31.03.2025     30.06.2024
+                                                    Unaudited        Audited      Unaudited
+--------------------------------------------------------------------------------------------------
+Revenue from operations                               3,412.06       3,288.90       3,155.42
+Other income                                             18.44          16.22          14.90
+Total income                                          3,430.50       3,305.12       3,170.32
+Cost of materials consumed                            2,006.29       1,953.61       1,804.90
+Purchases of stock-in-trade                             109.19         101.96          94.66
+Changes in inventories                                   (9.55)          7.18          (3.44)
+Employee benefits expense                               300.26         296.00         271.37
+Finance costs                                            41.06          43.55          45.02
+Depreciation and amortisation expense                   141.28         138.44         130.11
+Other expenses                                          621.21         577.97         558.05
+Total expenses                                        3,209.74       3,118.71       2,900.67
+Profit before tax                                       220.76         186.41         269.65
+Current tax                                              61.44          52.18          70.02
+Deferred tax                                             (5.15)         (4.27)         (2.07)
+Total tax expense                                        56.29          47.91          67.95
+Profit for the period                                   164.47         138.50         201.70
+Other comprehensive income (net of tax)                   3.02           2.41          (1.18)
+Total comprehensive income                              167.49         140.91         200.52
+Paid-up equity share capital (FV INR 10)                 40.47          40.47          40.47
+Earnings per share, basic and diluted (INR,
+  not annualised)                                        40.64          34.23          49.84
+--------------------------------------------------------------------------------------------------
+
+Note 5 — Non-GAAP measure
+EBITDA for the quarter ended 30 June 2025 was INR 384.66 Crore, an EBITDA margin of 11.3%
+on revenue from operations, compared with INR 352.18 Crore and a margin of 10.7% in the
+quarter ended 31 March 2025 and INR 429.88 Crore and a margin of 13.6% in the quarter ended
+30 June 2024.
+
+STATEMENT OF ASSETS AND LIABILITIES (EXTRACT), AS AT 30 JUNE 2025 — UNAUDITED
+(INR Crore)
+--------------------------------------------------------------------------------------------------
+Total assets                                           9,612.44
+Total equity                                           4,528.90
+Total liabilities                                      5,083.54
+Total borrowings                                       2,088.44
+Current assets                                         3,244.18
+    Inventories                                        1,388.02
+    Cash and cash equivalents                            402.11
+Current liabilities                                    3,010.55
+--------------------------------------------------------------------------------------------------
+
+RATIOS DISCLOSED UNDER REGULATION 52(4)
+Debt-equity ratio                                           0.46
+Current ratio                                               1.08
+Quick ratio                                                 0.62
+Interest service coverage ratio                             5.93
+Return on equity (annualised)                              14.5%
+Return on capital employed (annualised)                    14.7%
+
+CASH FLOW STATEMENT (EXTRACT) FOR THE QUARTER ENDED 30 JUNE 2025 — UNAUDITED
+(INR Crore)
+--------------------------------------------------------------------------------------------------
+Net cash generated from operating activities             288.14
+Capital expenditure (additions to PPE and intangibles)    236.55
+Free cash flow                                            51.59
+--------------------------------------------------------------------------------------------------
+
+SEGMENT NOTE — QUARTER ENDED 30 JUNE 2025
+Share of revenue from operations by channel:
+    Replacement                                            62%
+    Original equipment                                     25%
+    Exports                                                13%
+
+Share of revenue from operations by category:
+    Truck and bus radial (TBR)                             22%
+    Truck and bus bias (TBB)                                5%
+    Passenger car radial (PCR)                             28%
+    Two-wheeler (2W)                                       24%
+    Off-highway tyres (OHT)                                13%
+    Others                                                  8%
+
+MANAGEMENT COMMENTARY
+Revenue grew 8.1% year on year, led by the two-wheeler and passenger car replacement
+channels and by continued traction in the international business. Margin performance
+improved sequentially but remains below the year-ago quarter: natural rubber costs stayed
+above INR 200 per kg through the quarter, and crude-derivative inputs such as carbon black,
+synthetic rubber and rubber chemicals were higher sequentially. Pricing actions taken in
+the replacement channel in April and June 2025 have partly offset the input cost increase,
+and the Company expects a further improvement in margin in the second quarter if raw
+material prices stabilise at current levels.
+
+Capital expenditure of INR 236.55 Crore in the quarter was directed at the Chennai
+passenger car radial expansion and at the off-highway tyre capacity at Ambernath. Planned
+capital expenditure for FY26 is INR 1,000 Crore, weighted towards the second half of the
+year, and will be funded through internal accruals with no incremental long-term borrowing
+contemplated.
+
+These results were reviewed by the Audit Committee and approved by the Board of Directors
+at its meeting held on 30 July 2025, and have been subjected to a limited review by the
+statutory auditors.
+
+For CEAT Limited
+Managing Director and Chief Executive Officer
+Mumbai, 30 July 2025
