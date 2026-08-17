@@ -1,0 +1,12 @@
+node_modules/
+
+# Section 0, boundary 2: retrieved source documents are processed within a run and
+# written to reviewed output. They are never committed and never archived on a
+# schedule. `runs/` is working space for the current run only.
+runs/
+*.pdf
+
+.DS_Store
+.env
+.env.*
+!.env.example
