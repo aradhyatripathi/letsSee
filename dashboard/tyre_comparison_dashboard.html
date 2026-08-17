@@ -107,6 +107,69 @@
 
   .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--graphite);color:#fff;padding:10px 20px;border-radius:8px;font-size:13px;font-weight:600;opacity:0;pointer-events:none;transition:opacity .25s;z-index:50;}
   .toast.show{opacity:1;}
+
+  /* ---- added: storage-mode notice, review gate, workbook, Q&A ---- */
+  .notice{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--text-mute);background:var(--paper-2);border:1px dashed var(--line-strong);border-radius:6px;padding:7px 11px;margin:-14px 0 20px;}
+  .notice b{color:var(--text);font-weight:600;}
+  .notice.warn{border-color:var(--amber);background:var(--amber-light);color:var(--graphite);}
+
+  .badge{display:inline-block;font-family:'Inter',sans-serif;font-size:10px;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;padding:2px 8px;border-radius:10px;vertical-align:middle;}
+  .badge.pending{background:var(--amber-light);color:var(--amber);}
+  .badge.approved{background:rgba(61,122,82,0.14);color:var(--good);}
+  .badge.rejected{background:rgba(176,64,44,0.14);color:var(--bad);}
+  .badge.fail{background:var(--bad);color:#fff;}
+  .badge.unquoted{background:var(--line);color:var(--text-mute);}
+
+  .count-row{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px;}
+  .count-pill{border:1px solid var(--line);border-radius:8px;padding:8px 14px;min-width:96px;}
+  .count-pill .n{font-family:'IBM Plex Mono',monospace;font-size:19px;font-weight:600;line-height:1.1;}
+  .count-pill .l{font-size:10px;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-mute);}
+  .count-pill.pending{border-color:var(--amber);} .count-pill.pending .n{color:var(--amber);}
+  .count-pill.approved .n{color:var(--good);}
+  .count-pill.rejected .n{color:var(--bad);}
+
+  .rv-card{border:1px solid var(--line);border-left:4px solid var(--line-strong);border-radius:8px;padding:14px 16px;margin-bottom:16px;}
+  .rv-card.approved{border-left-color:var(--good);}
+  .rv-card.rejected{border-left-color:var(--bad);background:var(--paper);}
+  .rv-card.verifyfail{border-left-color:var(--bad);border-color:var(--bad);}
+  .rv-head{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap;}
+  .rv-head h3{margin:0;font-size:15px;}
+  .rv-head .meta{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--text-mute);}
+  .rv-alarm{background:var(--bad);color:#fff;font-size:12px;font-weight:700;padding:9px 12px;border-radius:6px;margin:12px 0 4px;}
+  .rv-warn{background:var(--amber-light);color:var(--graphite);border:1px solid var(--amber);font-size:12px;font-weight:600;padding:9px 12px;border-radius:6px;margin:12px 0 4px;}
+  .rv-table{width:100%;border-collapse:collapse;font-size:12px;margin-top:10px;}
+  .rv-table th{padding:6px 8px;}
+  .rv-table td{padding:6px 8px;vertical-align:top;}
+  .rv-table td.quote{font-family:'Inter',sans-serif;color:var(--text-mute);font-size:11px;}
+  .rv-table td.val{white-space:nowrap;font-weight:600;}
+  .rv-table tr.bad td{background:rgba(176,64,44,0.10);}
+  .rv-table tr.unq td{background:rgba(201,113,31,0.09);}
+  .rv-table tr.flagged td{box-shadow:inset 3px 0 0 var(--amber);}
+  .rv-table .flagbtn{font-family:'Inter',sans-serif;font-size:10px;padding:2px 7px;border-radius:5px;border:1px solid var(--line-strong);background:var(--paper-2);color:var(--text-mute);cursor:pointer;}
+  .rv-table .flagbtn.on{border-color:var(--amber);color:var(--amber);font-weight:700;}
+  .rv-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:14px;padding-top:12px;border-top:1px dashed var(--line-strong);}
+  .rv-actions input[type=text]{flex:1 1 240px;width:auto;}
+  .btn-approve{background:var(--good);color:#fff;}
+  .btn-reject{background:transparent;color:var(--bad);border:1px solid var(--bad);}
+  .rv-note{font-size:11px;color:var(--text-mute);margin-top:8px;}
+
+  .chat{border:1px solid var(--line);border-radius:8px;background:var(--paper);padding:14px;height:400px;overflow-y:auto;margin-bottom:12px;}
+  .msg{margin-bottom:15px;}
+  .msg .who{font-family:'IBM Plex Mono',monospace;font-size:10px;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-mute);margin-bottom:3px;}
+  .msg .body{font-size:13px;white-space:pre-wrap;}
+  .msg.q .body{font-weight:600;}
+  .msg.err .body{color:var(--bad);}
+  .msg .grounding{font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--text-mute);margin-top:5px;}
+  .ask-row{display:flex;gap:8px;align-items:flex-start;}
+  .ask-row textarea{flex:1;min-height:44px;}
+
+  .chart-missing{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;text-align:center;font-size:12px;color:var(--text-mute);border:1px dashed var(--line-strong);border-radius:8px;padding:18px;}
+
+  .check{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text-mute);font-weight:600;}
+  .check input{width:auto;}
+  .fail-table{width:100%;border-collapse:collapse;font-size:12px;margin-top:10px;}
+  .fail-table td{padding:6px 8px;vertical-align:top;}
+  .fail-table td.quote{font-family:'Inter',sans-serif;font-size:11px;}
 </style>
 </head>
 <body>
@@ -117,11 +180,16 @@
     <span class="tag">local data · saved in this browser</span>
   </div>
 
+  <div class="notice" id="storage-notice"></div>
+
   <div class="tabs">
     <button class="tab active" data-tab="entry">Add data</button>
     <button class="tab" data-tab="records">Records</button>
+    <button class="tab" data-tab="review">Review <span id="tab-review-count"></span></button>
     <button class="tab" data-tab="dashboard">Dashboard</button>
     <button class="tab" data-tab="compete">Competitive analysis</button>
+    <button class="tab" data-tab="ask">Ask</button>
+    <button class="tab" data-tab="settings">Settings</button>
   </div>
 
   <!-- ENTRY -->
@@ -130,6 +198,7 @@
     <div class="card">
       <h2>Upload a document</h2>
       <p class="sub">Drop in a filing, transcript, or annual report excerpt (.txt or .pdf) — Claude reads it, detects the reporting currency/unit, pulls a short source quote for each figure, and adds the record automatically. Uploading again for the same company and quarter updates that record instead of duplicating it.</p>
+      <p class="sub">Every quoted figure is then checked back against the document you uploaded before anything is stored. A figure whose quote can't be found — or whose quote doesn't contain the number — is re-extracted once and, if it still doesn't check out, the record is <b>not</b> saved. Records that pass arrive as <b>pending</b> and wait for you in Review. The document itself is read in memory for this run and never saved.</p>
       <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
         <input type="file" id="file-input" accept=".txt,.md,.pdf">
         <button type="button" class="btn btn-amber" id="extract-btn">Upload and add</button>
@@ -139,6 +208,12 @@
 
     <div class="card" id="extract-banner" style="display:none;background:var(--amber-light);border-color:var(--amber);">
       <span style="font-size:13px;font-weight:600;" id="extract-banner-text"></span>
+    </div>
+
+    <div class="card" id="extract-verify" style="display:none;border-color:var(--bad);">
+      <h2 style="color:var(--bad);">Not stored — these figures could not be traced to the document</h2>
+      <p class="sub">The extraction was retried once with the failing fields named. It still could not produce a quote that both appears in your document and contains the figure, so nothing was written to storage — a record that fails this check must not reach the reviewer looking like it passed.</p>
+      <div id="extract-verify-body"></div>
     </div>
 
     <div class="card">
@@ -284,12 +359,29 @@
       <p class="sub">All figures shown normalized to ₹ crore. YoY compares to the same period a year ago; QoQ compares to the immediately preceding period for that company (both need parseable "Qx FYyy" / "Hx FYyy" style labels to compute). Click a record's second "+" for its segment breakdown, source quotes, and notes.</p>
       <div class="toolbar">
         <button type="button" class="btn btn-ghost" id="export-csv-btn">Export CSV</button>
-        <button type="button" class="btn btn-ghost" id="export-excel-btn">Export Excel</button>
+        <button type="button" class="btn btn-ghost" id="export-excel-btn">Export Excel workbook</button>
+        <label class="check"><input type="checkbox" id="workbook-reviewed-only" checked> Approved records only</label>
         <button type="button" class="btn btn-ghost" id="backup-json-btn">Backup all data (JSON)</button>
-        <button type="button" class="btn btn-ghost" id="restore-json-btn">Restore from backup</button>
+        <button type="button" class="btn btn-ghost" id="restore-json-btn">Restore / import JSON</button>
         <input type="file" id="restore-json-input" accept="application/json" style="display:none;">
       </div>
+      <p class="sub" style="margin-top:-8px;">The Excel export is a four-sheet workbook — Core Financials, Segments, Outlook, Sources &amp; Quotes — and every populated Core Financials cell carries a comment with the source quote behind it, so a number can be checked without leaving the file. "Approved records only" is on by default: an export is reviewed data unless you deliberately say otherwise. The CSV above is unchanged (one flat sheet, all records, normalized to ₹ crore). One honest caveat about formatting: this page loads the community build of SheetJS, whose writer ignores per-cell styling — column widths and the cell comments come through, but bold headers and wrapped text are dropped, and freeze panes may be too. The data and the traceability are unaffected, which is what the workbook is for.</p>
+      <p class="sub" style="margin-top:-8px;">"Restore / import JSON" takes either a backup from this dashboard or a <span style="font-family:'IBM Plex Mono',monospace;">records.json</span> written by the Node pipeline (and a bare array of records). Each record is validated on the way in, anything malformed is listed rather than silently dropped, and imported records arrive <b>pending</b>. A review decision is only carried in where this browser already holds that exact record unchanged, so the decision was demonstrably made here — a file cannot import its own approvals.</p>
+      <div class="card" id="import-report" style="display:none;background:var(--paper);"></div>
       <div id="records-wrap"></div>
+    </div>
+  </div>
+
+  <!-- REVIEW -->
+  <div class="panel" id="panel-review">
+    <div class="card">
+      <h2>Review — nothing is trustworthy until a person says so</h2>
+      <p class="sub">Every record from every source lands here as <b>pending</b>, including records that were already in this browser before the review gate existed. Each figure is shown next to the exact quote stored for it and how that quote checked out against the source document, so a whole run of companies is one pass instead of one review per company. There is deliberately no bulk approve and no auto-accept at any scale: approval is one considered click per record.</p>
+      <div class="count-row" id="review-counts"></div>
+      <div class="toolbar">
+        <div class="select-row" id="review-filter-chips" style="margin-bottom:0;"></div>
+      </div>
+      <div id="review-wrap"></div>
     </div>
   </div>
 
@@ -400,11 +492,910 @@
     </div>
   </div>
 
+  <!-- ASK -->
+  <div class="panel" id="panel-ask">
+    <div class="card">
+      <h2>Ask about the stored records</h2>
+      <p class="sub">Questions are answered only from the records in this browser — the whole set by default, so cross-company questions ("which company has the best EBITDA margin", "which ones mentioned rising rubber costs") work properly. Any number in an answer comes with the quote stored for it; if the records don't contain the answer, the answer says so instead of guessing. Records you rejected are withheld, and records still pending review are declared as such.</p>
+      <div class="chat" id="ask-log"></div>
+      <div class="ask-row">
+        <textarea id="ask-input" placeholder="e.g. Which company reported the highest EBITDA margin, and what quote supports it?"></textarea>
+        <button type="button" class="btn btn-primary" id="ask-btn">Ask</button>
+      </div>
+      <div class="hint" id="ask-hint"></div>
+    </div>
+  </div>
+
+  <!-- SETTINGS -->
+  <div class="panel" id="panel-settings">
+    <div class="card">
+      <h2>Claude API key</h2>
+      <p class="sub">Needed by the two features that call Claude: extraction from an uploaded document, and Ask. Everything else — manual entry, records, charts, review, CSV and the workbook — works without one.</p>
+      <div class="grid">
+        <div class="field full">
+          <label>API key</label>
+          <input id="api-key-input" type="password" placeholder="sk-ant-..." autocomplete="off">
+          <div class="hint"><b>Held in memory for this browser tab only.</b> It is never written to storage, never written to localStorage, and never included in a backup — reload the page and you will need to enter it again. Leave it empty when running inside the Claude artifact runtime, which proxies these calls for you.</div>
+        </div>
+      </div>
+      <div style="display:flex;gap:10px;margin-top:12px;align-items:center;flex-wrap:wrap;">
+        <button type="button" class="btn btn-primary" id="api-key-save">Use this key</button>
+        <button type="button" class="btn btn-ghost" id="api-key-clear">Clear key</button>
+        <span id="api-key-status" style="font-size:12px;color:var(--text-mute);"></span>
+      </div>
+    </div>
+    <div class="card">
+      <h2>What this page does and does not do</h2>
+      <p class="sub">Short version, so nothing here is a surprise.</p>
+      <div class="detail-text"><b>Manual trigger only</b>Nothing runs on a schedule. Extraction happens when you press "Upload and add"; a question is asked when you press "Ask". There is no polling, no timer, and no code path that re-runs itself.</div>
+      <div class="detail-text"><b>No storage of source documents</b>An uploaded filing is read into memory, used for extraction and for checking quotes, and dropped when the run ends. Only the extracted record and its quotes are saved.</div>
+      <div class="detail-text"><b>No fabricated quotes, no estimated numbers</b>The extraction prompt forbids both, and the quote check enforces the first one: a quote that isn't in your document fails, and so does a real quote that doesn't contain the figure it was cited for.</div>
+      <div class="detail-text" id="settings-libs"><b>Libraries</b></div>
+    </div>
+  </div>
+
 </div>
 <div class="toast" id="toast"></div>
 
+<!--
+  The shared data contract, inlined verbatim from pipeline/lib/core-source.js by
+  `npm run sync:core` (and checked byte-for-byte by `npm run check:core`), so the
+  dashboard and the Node pipeline agree on one schema, one stored shape, one quote
+  threshold and one workbook model.
+
+  It lives in its own script, inside an IIFE, because it declares its own
+  SCHEMA_HINT / computeDeltas / recToStoredShape and this file already has three
+  functions by those names with different signatures. Function scope keeps both
+  sets alive: the core publishes window.TyreCore on its way out, and the dashboard
+  reaches it below as `Core`. Do not edit the block by hand — edit
+  pipeline/lib/core-source.js and re-run `npm run sync:core`.
+-->
 <script>
-const STORAGE_KEY = 'tyre-records-v2';
+(function () {
+/* ==== TYRE-CORE:BEGIN ====
+ * Single source of truth for the data contract shared by the dashboard and the
+ * Node pipeline. This file is inlined verbatim into
+ * dashboard/tyre_comparison_dashboard.html between the TYRE-CORE markers, and
+ * loaded by pipeline/lib/core.mjs. `npm run sync:core` copies it into the
+ * dashboard; `npm test` fails if the two ever drift apart.
+ *
+ * Plain script — no imports, no exports, no top-level await. Everything hangs
+ * off the TyreCore object defined at the bottom.
+ */
+
+/* ---------------------------------------------------------------- schema -- */
+
+// Copied verbatim from the build spec, Section 2. Every stage keys off this.
+var SCHEMA_HINT = [
+  '{',
+  '  company, quarter,                       // strings, or null',
+  '  currency: { code, unit },               // INR/USD/... , Crore/Million/...',
+  '  core: {',
+  '    revenue, ebitda, ebitda_margin, pat, net_margin, roe, roce,',
+  '    debt_equity, current_ratio, quick_ratio, interest_coverage,',
+  '    total_assets, total_liabilities, total_equity, cash,',
+  '    ocf, capex_amt, fcf, inv_turnover, dso, dpo',
+  '    // number or null, never estimated',
+  '  },',
+  '  core_quotes: { ...same keys as core, short exact quote or "" },',
+  '  segments: {',
+  '    channels: { replacement, oem, export },',
+  '    product_categories: { TBR, TBB, PCR, "2W", OHT }',
+  '  },',
+  '  outlook: { commentary, rm_trend, capex }  // paraphrased, no verbatim quotes',
+  '}'
+].join('\n');
+
+// key: field name in `core`. money: true means the value carries the record's
+// currency unit; pct: a percentage; ratio: a bare multiple; days: a day count.
+var CORE_METRICS = [
+  { key: 'revenue',            label: 'Revenue',              kind: 'money' },
+  { key: 'ebitda',             label: 'EBITDA',               kind: 'money' },
+  { key: 'ebitda_margin',      label: 'EBITDA Margin',        kind: 'pct'   },
+  { key: 'pat',                label: 'PAT',                  kind: 'money' },
+  { key: 'net_margin',         label: 'Net Margin',           kind: 'pct'   },
+  { key: 'roe',                label: 'ROE',                  kind: 'pct'   },
+  { key: 'roce',               label: 'ROCE',                 kind: 'pct'   },
+  { key: 'debt_equity',        label: 'Debt / Equity',        kind: 'ratio' },
+  { key: 'current_ratio',      label: 'Current Ratio',        kind: 'ratio' },
+  { key: 'quick_ratio',        label: 'Quick Ratio',          kind: 'ratio' },
+  { key: 'interest_coverage',  label: 'Interest Coverage',    kind: 'ratio' },
+  { key: 'total_assets',       label: 'Total Assets',         kind: 'money' },
+  { key: 'total_liabilities',  label: 'Total Liabilities',    kind: 'money' },
+  { key: 'total_equity',       label: 'Total Equity',         kind: 'money' },
+  { key: 'cash',               label: 'Cash',                 kind: 'money' },
+  { key: 'ocf',                label: 'Operating Cash Flow',  kind: 'money' },
+  { key: 'capex_amt',          label: 'Capex',                kind: 'money' },
+  { key: 'fcf',                label: 'Free Cash Flow',       kind: 'money' },
+  { key: 'inv_turnover',       label: 'Inventory Turnover',   kind: 'ratio' },
+  { key: 'dso',                label: 'DSO',                  kind: 'days'  },
+  { key: 'dpo',                label: 'DPO',                  kind: 'days'  }
+];
+
+var CORE_KEYS = CORE_METRICS.map(function (m) { return m.key; });
+
+var CHANNEL_KEYS = ['replacement', 'oem', 'export'];
+var PRODUCT_KEYS = ['TBR', 'TBB', 'PCR', '2W', 'OHT'];
+var OUTLOOK_KEYS = ['commentary', 'rm_trend', 'capex'];
+
+// Indicative rates, used only to put every company on one axis for comparison.
+// Reported figures are always kept in their source currency and unit; the
+// normalized value is a derived convenience, never a substitute for the source.
+var FX_TO_INR = { INR: 1, USD: 83, EUR: 90, GBP: 105, KRW: 0.06, JPY: 0.56, CNY: 11.5 };
+
+// What the dashboard fills in when a filing does not state its scale.
+var DEFAULT_UNIT_FOR_CURRENCY = {
+  INR: 'Crore', USD: 'Million', EUR: 'Million', GBP: 'Million',
+  KRW: 'Billion', JPY: 'Billion', CNY: 'Million'
+};
+
+// Multiplier from one unit into INR crore (1 crore = 10 million).
+var UNIT_TO_CRORE = {
+  crore: 1,
+  cr: 1,
+  lakh: 0.01,
+  million: 0.1,
+  mn: 0.1,
+  bn: 100,
+  billion: 100,
+  thousand: 0.0001,
+  actual: 0.0000001,
+  unit: 0.0000001,
+  '': 1
+};
+
+/* -------------------------------------------------------------- utilities -- */
+
+function isNum(v) {
+  return typeof v === 'number' && isFinite(v);
+}
+
+function unitKey(unit) {
+  return String(unit == null ? '' : unit).trim().toLowerCase().replace(/s$/, '');
+}
+
+function fxToInr(code) {
+  var c = String(code == null ? 'INR' : code).trim().toUpperCase();
+  return Object.prototype.hasOwnProperty.call(FX_TO_INR, c) ? FX_TO_INR[c] : null;
+}
+
+// Convert a reported money figure into INR crore. Returns null when the value is
+// absent or the currency/unit is not one we can convert without guessing.
+function toInrCrore(value, currency) {
+  if (!isNum(value)) return null;
+  var cur = currency || {};
+  var fx = fxToInr(cur.code);
+  if (fx == null) return null;
+  var mult = UNIT_TO_CRORE[unitKey(cur.unit)];
+  if (mult == null) return null;
+  return value * fx * mult;
+}
+
+function formatMetric(value, metric, currency) {
+  if (!isNum(value)) return '—';
+  var kind = metric && metric.kind;
+  if (kind === 'pct') return value.toFixed(1) + '%';
+  if (kind === 'ratio') return value.toFixed(2) + 'x';
+  if (kind === 'days') return Math.round(value) + ' days';
+  var cur = currency || {};
+  var suffix = [cur.code || '', cur.unit || ''].filter(Boolean).join(' ');
+  var shown = Math.abs(value) >= 100 ? value.toFixed(0) : value.toFixed(2);
+  return suffix ? shown + ' ' + suffix : shown;
+}
+
+// Cheap deterministic id so re-importing the same filing twice is detectable.
+function recordId(company, quarter, source) {
+  var basis = [company || '', quarter || '', source || ''].join('|').toLowerCase();
+  var h = 5381;
+  for (var i = 0; i < basis.length; i++) {
+    h = ((h << 5) + h + basis.charCodeAt(i)) >>> 0;
+  }
+  var slug = String(company || 'unknown').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+  var q = String(quarter || 'unknown').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+  return slug + '_' + q + '_' + h.toString(36);
+}
+
+/* -------------------------------------------------------- stored transform -- */
+
+// Extraction output -> stored shape. Field-for-field, no invention: anything the
+// model did not report stays null, and quotes stay exactly as returned.
+function recToStoredShape(rec, opts) {
+  var o = opts || {};
+  var r = rec || {};
+  var cur = r.currency || {};
+  var code = cur.code == null ? null : String(cur.code).trim().toUpperCase() || null;
+  var unit = cur.unit == null ? null : String(cur.unit).trim() || null;
+
+  var core = {};
+  var quotes = {};
+  var srcCore = r.core || {};
+  var srcQuotes = r.core_quotes || {};
+  for (var i = 0; i < CORE_KEYS.length; i++) {
+    var k = CORE_KEYS[i];
+    var v = srcCore[k];
+    core[k] = isNum(v) ? v : null;
+    var q = srcQuotes[k];
+    quotes[k] = typeof q === 'string' ? q : '';
+  }
+
+  var segIn = r.segments || {};
+  var chIn = segIn.channels || {};
+  var pcIn = segIn.product_categories || {};
+  var channels = {};
+  var products = {};
+  for (var c = 0; c < CHANNEL_KEYS.length; c++) {
+    channels[CHANNEL_KEYS[c]] = isNum(chIn[CHANNEL_KEYS[c]]) ? chIn[CHANNEL_KEYS[c]] : null;
+  }
+  for (var p = 0; p < PRODUCT_KEYS.length; p++) {
+    products[PRODUCT_KEYS[p]] = isNum(pcIn[PRODUCT_KEYS[p]]) ? pcIn[PRODUCT_KEYS[p]] : null;
+  }
+
+  var outIn = r.outlook || {};
+  var outlook = {};
+  for (var oi = 0; oi < OUTLOOK_KEYS.length; oi++) {
+    var ov = outIn[OUTLOOK_KEYS[oi]];
+    outlook[OUTLOOK_KEYS[oi]] = typeof ov === 'string' && ov.trim() ? ov.trim() : null;
+  }
+
+  var company = r.company == null ? null : String(r.company).trim() || null;
+  var quarter = r.quarter == null ? null : String(r.quarter).trim() || null;
+  var source = o.source == null ? null : String(o.source);
+
+  return {
+    id: o.id || recordId(company, quarter, source),
+    company: company,
+    quarter: quarter,
+    source: source,
+    currency: { code: code, unit: unit, fx_to_inr: fxToInr(code) },
+    core: core,
+    quotes: quotes,
+    segments: { channels: channels, product_categories: products },
+    outlook: outlook,
+    review: o.review || { status: 'pending', reviewer: null, reviewed_at: null, note: null },
+    retrieved_at: o.retrieved_at || null,
+    verification: o.verification || null
+  };
+}
+
+// Structural check on a stored record. Returns a list of human-readable problems;
+// empty means the record is well-formed (it says nothing about whether the
+// numbers are right — that is what review is for).
+function validateStored(rec) {
+  var errs = [];
+  if (!rec || typeof rec !== 'object') return ['record is not an object'];
+  if (!rec.company) errs.push('missing company');
+  if (!rec.quarter) errs.push('missing quarter');
+  if (!rec.currency || !rec.currency.code) errs.push('missing currency.code');
+  if (!rec.currency || !rec.currency.unit) errs.push('missing currency.unit');
+  if (!rec.core || typeof rec.core !== 'object') {
+    errs.push('missing core');
+  } else {
+    for (var i = 0; i < CORE_KEYS.length; i++) {
+      var k = CORE_KEYS[i];
+      if (!(k in rec.core)) errs.push('core.' + k + ' absent (expected number or null)');
+      else if (rec.core[k] !== null && !isNum(rec.core[k])) errs.push('core.' + k + ' is not a number or null');
+    }
+  }
+  if (!rec.quotes || typeof rec.quotes !== 'object') errs.push('missing quotes');
+  if (!rec.segments || !rec.segments.channels || !rec.segments.product_categories) {
+    errs.push('missing segments');
+  }
+  return errs;
+}
+
+/* ---------------------------------------------------- quote verification -- */
+
+// Normalize for matching only. Collapses whitespace, unifies the quote marks and
+// dashes a PDF extractor mangles, drops the rest of the punctuation, lowercases.
+function normalizeForMatch(s) {
+  return String(s == null ? '' : s)
+    .replace(/[‘’‛′]/g, "'")
+    .replace(/[“”‟″]/g, '"')
+    .replace(/[‐-―−]/g, '-')
+    .replace(/ /g, ' ')
+    .toLowerCase()
+    .replace(/[^a-z0-9%.\-\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function tokenize(s) {
+  var t = normalizeForMatch(s).split(' ');
+  var out = [];
+  for (var i = 0; i < t.length; i++) if (t[i]) out.push(t[i]);
+  return out;
+}
+
+// Length of the longest common subsequence of two token arrays. Order-sensitive,
+// which is the whole point: it is what stops a quote reassembled from the
+// document's own words out of order from scoring as if it were verbatim.
+function lcsLength(a, b) {
+  var prev = new Array(b.length + 1).fill(0);
+  var cur = new Array(b.length + 1).fill(0);
+  for (var i = 1; i <= a.length; i++) {
+    cur[0] = 0;
+    for (var j = 1; j <= b.length; j++) {
+      cur[j] = a[i - 1] === b[j - 1]
+        ? prev[j - 1] + 1
+        : (prev[j] > cur[j - 1] ? prev[j] : cur[j - 1]);
+    }
+    var swap = prev; prev = cur; cur = swap;
+  }
+  return prev[b.length];
+}
+
+// How well `quote` matches some span of `sourceText`. A verbatim quote scores 1;
+// a paraphrase, a fabrication, or a quote stitched together from words that all
+// appear in the document but not in that order scores below it.
+//
+// Two passes, because order matters but is expensive: a cheap sliding multiset
+// scan finds the windows worth looking at, then those candidates are re-scored
+// by longest common subsequence so word order counts. Scoring on the multiset
+// alone would give "revenue 812.44 ... profit 6,543.21" a perfect score against
+// a source that says the opposite.
+function quoteMatchScore(sourceText, quote) {
+  var nq = normalizeForMatch(quote);
+  if (!nq) return 0;
+  var ns = normalizeForMatch(sourceText);
+  if (!ns) return 0;
+  if (ns.indexOf(nq) !== -1) return 1;
+
+  var qt = tokenize(quote);
+  if (!qt.length) return 0;
+  var st = tokenize(sourceText);
+  if (!st.length) return 0;
+
+  var want = {};
+  for (var i = 0; i < qt.length; i++) want[qt[i]] = (want[qt[i]] || 0) + 1;
+
+  var win = qt.length;
+  var have = {};
+  var matched = 0;
+  var candidates = [];
+  var bestBag = 0;
+
+  function add(tok) {
+    have[tok] = (have[tok] || 0) + 1;
+    if (want[tok] && have[tok] <= want[tok]) matched++;
+  }
+  function drop(tok) {
+    if (want[tok] && have[tok] <= want[tok]) matched--;
+    have[tok]--;
+  }
+
+  for (var j = 0; j < st.length; j++) {
+    add(st[j]);
+    if (j >= win) drop(st[j - win]);
+    if (matched > bestBag) bestBag = matched;
+    // A window can only beat the current best on order if its bag of words is
+    // already close, so this is a safe filter and keeps the LCS pass bounded.
+    if (matched >= win * 0.6) candidates.push(Math.max(0, j - win + 1));
+  }
+
+  // The bag score is an upper bound on the ordered score, so a bag that never
+  // gets close cannot produce a match and needs no second pass.
+  if (!candidates.length) return bestBag / win;
+
+  var STRIDE = Math.max(1, Math.ceil(candidates.length / 400));
+  var best = 0;
+  for (var c = 0; c < candidates.length; c += STRIDE) {
+    var start = candidates[c];
+    var score = lcsLength(qt, st.slice(start, start + win)) / win;
+    if (score > best) best = score;
+    if (best === 1) break;
+  }
+  return best;
+}
+
+// Does the figure actually appear in the span quoted to support it? Verifying
+// the quote against the source proves the sentence is real; it does not prove it
+// is the sentence this number came from. Indian quarterly tables carry three or
+// four comparative columns, so a model can quote a perfectly genuine row label
+// and still report the prior quarter's number from it.
+function quoteContainsValue(quote, value) {
+  if (!isNum(value)) return true;
+
+  // Period labels and dates are how a filing names the column, not the figure in
+  // it. Left in, they are candidate numbers: a fabricated ROCE of 26 would
+  // "verify" against the text FY26, and a 1 against Q1. Strip them first.
+  // A bare four-digit number is deliberately NOT stripped — it can be a genuine
+  // figure (revenue of 2,025 crore) and is only a year in the patterns below.
+  var scrubbed = String(quote == null ? '' : quote)
+    .replace(/\b(?:FY|CY)\s*'?\s*\d{2,4}\b/gi, ' ')
+    .replace(/\b[QH]\s*[1-4]\b/gi, ' ')
+    .replace(/\b\d{1,2}\s+(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s*,?\s*\d{2,4}\b/gi, ' ')
+    .replace(/\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s*,?\s*\d{2,4}\b/gi, ' ');
+
+  // Indian filings write a loss in the accounting convention — "(1,234.50)" —
+  // so a parenthesised figure is the negative of what it reads as. Without this
+  // a correctly-quoted loss fails the check and the whole record is thrown away.
+  var found = scrubbed.match(/\(\s*\d[\d,]*(?:\.\d+)?\s*\)|-?\d[\d,]*(?:\.\d+)?/g);
+  if (!found) return false;
+
+  // Percentages and ratios are often quoted rounded ("margin of 14.5%" for
+  // 14.53), so allow a tolerance that scales with the figure's own magnitude.
+  var tolerance = Math.max(0.05, Math.abs(value) * 0.005);
+  for (var i = 0; i < found.length; i++) {
+    var token = found[i];
+    var n = parseFloat(token.replace(/[(),\s]/g, ''));
+    if (!isFinite(n)) continue;
+    if (token.charAt(0) === '(') n = -n;
+    if (Math.abs(n - value) <= tolerance) return true;
+  }
+  return false;
+}
+
+var QUOTE_MATCH_THRESHOLD = 0.85;
+
+// Section 4 / Stage 2: this is the actual enforcement of "never fabricate a
+// quote". Every non-empty quote must be traceable back to the retrieved source
+// text; a number reported without a quote is flagged rather than silently kept.
+function verifyQuotes(rec, sourceText, opts) {
+  var threshold = (opts && typeof opts.threshold === 'number') ? opts.threshold : QUOTE_MATCH_THRESHOLD;
+  var core = (rec && rec.core) || {};
+  var quotes = (rec && (rec.quotes || rec.core_quotes)) || {};
+  var checks = [];
+  var failed = 0;
+  var unquoted = 0;
+
+  for (var i = 0; i < CORE_KEYS.length; i++) {
+    var k = CORE_KEYS[i];
+    var value = core[k];
+    var quote = quotes[k];
+    var hasValue = isNum(value);
+    var hasQuote = typeof quote === 'string' && quote.trim().length > 0;
+
+    if (!hasValue && !hasQuote) continue;
+
+    if (hasValue && !hasQuote) {
+      unquoted++;
+      checks.push({ key: k, value: value, quote: '', score: 0, status: 'unquoted' });
+      continue;
+    }
+
+    var score = quoteMatchScore(sourceText, quote);
+    var status;
+    if (score < threshold) status = 'not_found';
+    else if (hasValue && !quoteContainsValue(quote, value)) status = 'value_not_in_quote';
+    else status = 'verified';
+    if (status !== 'verified') failed++;
+    checks.push({ key: k, value: hasValue ? value : null, quote: quote, score: Math.round(score * 1000) / 1000, status: status });
+  }
+
+  return {
+    ok: failed === 0,
+    threshold: threshold,
+    checked: checks.length,
+    verified: checks.filter(function (c) { return c.status === 'verified'; }).length,
+    failed: failed,
+    not_found: checks.filter(function (c) { return c.status === 'not_found'; }).length,
+    value_not_in_quote: checks.filter(function (c) { return c.status === 'value_not_in_quote'; }).length,
+    unquoted: unquoted,
+    checks: checks
+  };
+}
+
+/* ------------------------------------------------------------- comparison -- */
+
+// Sortable key for a period label, or null when the label does not parse —
+// callers fall back to insertion order.
+//
+// The Indian companies file on a fiscal year ("Q1 FY26", "Q3FY2025", "H1 FY26");
+// the global ones a comparison would pull in file on a calendar year ("Q1 2026",
+// "Q1 CY26"). Both are handled. Note the two are on separate numbering, so a
+// CY-labelled quarter and an FY-labelled quarter covering the same real months do
+// not land on the same key — that ambiguity is inherent in comparing fiscal-year
+// against calendar-year reporters, not something a label parser can resolve.
+function quarterSortKey(quarter) {
+  if (!quarter) return null;
+  var s = String(quarter).toUpperCase();
+
+  var q = /Q\s*([1-4])/.exec(s);
+  var h = /H\s*([12])/.exec(s);
+  var period = q ? parseInt(q[1], 10) : (h ? parseInt(h[1], 10) * 2 : 0);
+
+  var fy = /FY\s*'?\s*(\d{2,4})/.exec(s);
+  var cy = /CY\s*'?\s*(\d{2,4})/.exec(s) || /\b(20\d{2})\b/.exec(s);
+  var m = fy || cy;
+  if (!m) return null;
+
+  var year = parseInt(m[1], 10);
+  if (year < 100) year += 2000;
+  return year * 10 + period;
+}
+
+// Quarter-over-quarter change per company, on reported values (same currency and
+// unit by construction — a currency change between quarters yields null).
+function computeDeltas(records) {
+  var byCompany = {};
+  (records || []).forEach(function (r) {
+    var name = r.company || 'Unknown';
+    (byCompany[name] = byCompany[name] || []).push(r);
+  });
+
+  var out = [];
+  Object.keys(byCompany).forEach(function (name) {
+    var rows = byCompany[name].slice().sort(function (a, b) {
+      var ka = quarterSortKey(a.quarter), kb = quarterSortKey(b.quarter);
+      if (ka == null || kb == null) return 0;
+      return ka - kb;
+    });
+    for (var i = 1; i < rows.length; i++) {
+      var prev = rows[i - 1], cur = rows[i];
+      // Two records for the same company and quarter are the same filing reached
+      // two ways, not a quarter's movement — comparing them would invent a delta.
+      var kPrev = quarterSortKey(prev.quarter), kCur = quarterSortKey(cur.quarter);
+      if (kPrev != null && kCur != null && kPrev >= kCur) continue;
+      if (kPrev == null && kCur == null && String(prev.quarter) === String(cur.quarter)) continue;
+      // Compare the basis, not its spelling: an extraction that returns "Crores"
+      // where another returned "Crore" has not changed units.
+      var sameBasis =
+        String((prev.currency || {}).code || '').toUpperCase() === String((cur.currency || {}).code || '').toUpperCase() &&
+        unitKey((prev.currency || {}).unit) === unitKey((cur.currency || {}).unit);
+      var metrics = {};
+      for (var m = 0; m < CORE_KEYS.length; m++) {
+        var k = CORE_KEYS[m];
+        var a = prev.core ? prev.core[k] : null;
+        var b = cur.core ? cur.core[k] : null;
+        if (!sameBasis || !isNum(a) || !isNum(b)) { metrics[k] = null; continue; }
+        metrics[k] = { from: a, to: b, abs: b - a, pct: a === 0 ? null : ((b - a) / Math.abs(a)) * 100 };
+      }
+      out.push({ company: name, from_quarter: prev.quarter, to_quarter: cur.quarter, metrics: metrics });
+    }
+  });
+  return out;
+}
+
+/* ---------------------------------------------------------------- prompts -- */
+
+// The guardrails live here, not in the caller: never fabricate a quote, never
+// estimate a number, detect currency and unit explicitly from the source.
+var EXTRACTION_SYSTEM = [
+  'You extract financial data from Indian tyre-sector quarterly filings into a fixed JSON schema.',
+  '',
+  'Rules, in order of importance:',
+  '1. Never fabricate a quote. Every value in core_quotes must be a short span copied',
+  '   character-for-character from the source text. If you cannot copy an exact span',
+  '   supporting a figure, return "" for that quote and null for that figure.',
+  '2. Never estimate, derive, annualize, or infer a number. If the filing does not state',
+  '   it, the value is null. A margin you computed yourself is not a reported margin.',
+  '3. Detect currency and unit explicitly from the source (e.g. "INR"/"Crore",',
+  '   "USD"/"Million"). Do not assume. If the source does not say, use null.',
+  '4. Report figures exactly as stated, in the source\'s own unit. Do not rescale.',
+  '5. outlook fields are paraphrased management commentary — no verbatim quotes there.',
+  '6. Segment values are the share or value as reported; null when not broken out.',
+  '',
+  'Return one JSON object and nothing else. No markdown fence, no commentary.'
+].join('\n');
+
+// Section 4 / Stage 2 flags the 60,000-char truncation as a risk on a full
+// quarterly report. We keep a much larger budget and, when we must cut, we keep
+// the financial-statement region rather than blindly taking the first N chars.
+var SOURCE_CHAR_BUDGET = 400000;
+
+var FINANCIAL_SECTION_HINTS = [
+  'statement of profit and loss', 'profit and loss', 'financial results',
+  'balance sheet', 'cash flow', 'segment', 'ebitda', 'revenue from operations',
+  'total income', 'earnings per share', 'unaudited', 'audited'
+];
+
+// Keep the densest financial region when a filing exceeds the budget. Scores
+// fixed-size windows by how many statement markers they contain and keeps the
+// best contiguous span, plus the head of the document for company/quarter context.
+function selectFinancialText(text, budget) {
+  var src = String(text == null ? '' : text);
+  var cap = budget || SOURCE_CHAR_BUDGET;
+  if (src.length <= cap) return { text: src, truncated: false, strategy: 'full' };
+
+  var lower = src.toLowerCase();
+  var head = Math.min(4000, Math.floor(cap * 0.05));
+  var body = cap - head;
+  var step = Math.max(1000, Math.floor(body / 20));
+
+  var bestStart = 0;
+  var bestScore = -1;
+  for (var start = 0; start + body <= src.length; start += step) {
+    var windowText = lower.slice(start, start + body);
+    var score = 0;
+    for (var h = 0; h < FINANCIAL_SECTION_HINTS.length; h++) {
+      var hint = FINANCIAL_SECTION_HINTS[h];
+      var idx = windowText.indexOf(hint);
+      while (idx !== -1) { score++; idx = windowText.indexOf(hint, idx + hint.length); }
+    }
+    if (score > bestScore) { bestScore = score; bestStart = start; }
+  }
+
+  var kept = src.slice(0, head) + '\n\n[... document trimmed to the financial-statement section ...]\n\n' +
+             src.slice(bestStart, bestStart + body);
+  return { text: kept, truncated: true, strategy: 'financial-section', kept_from: bestStart, source_length: src.length };
+}
+
+function buildExtractionPrompt(sourceText, hints) {
+  var h = hints || {};
+  var sel = selectFinancialText(sourceText, h.budget);
+  var lines = [];
+  if (h.company) lines.push('Expected company: ' + h.company + ' (correct it if the filing disagrees).');
+  if (h.quarter) lines.push('Expected quarter: ' + h.quarter + ' (correct it if the filing disagrees).');
+  var user = [
+    lines.join('\n'),
+    '',
+    'Extract into exactly this schema:',
+    SCHEMA_HINT,
+    '',
+    'Source filing text:',
+    '"""',
+    sel.text,
+    '"""'
+  ].join('\n');
+  return { system: EXTRACTION_SYSTEM, user: user, selection: sel };
+}
+
+var QA_SYSTEM = [
+  'You answer questions about Indian tyre companies using ONLY the reviewed records provided below.',
+  '',
+  'Rules:',
+  '1. Answer only from the provided records. These records are the whole world.',
+  '2. If the records do not contain the answer, say so plainly — do not fall back on',
+  '   general knowledge about these companies, and do not guess.',
+  '3. Whenever you cite a number, show the record\'s stored quote for that figure',
+  '   alongside it, with the company and quarter. A number with no quote in the record',
+  '   should be reported as unverified.',
+  '4. Cross-company comparisons are expected. Compare only figures on the same currency',
+  '   and unit basis; if the bases differ, say so instead of converting silently.',
+  '5. Null means "not reported in that filing", which is different from zero.',
+  '',
+  'You also know the structure of the workbook this dashboard exports, and may answer',
+  'questions about it directly:',
+  '- "Core Financials": one row per company, one column per core metric, current quarter.',
+  '- "Segments": channel (replacement/OEM/export) and product-category breakdowns.',
+  '- "Outlook": commentary, raw-material trend, and capex per company.',
+  '- "Sources & Quotes": every figure with its exact source quote, keyed COMPANY|QUARTER|metric,',
+  '  which is what each Core Financials cell comment points at.'
+].join('\n');
+
+// Records are serialized whole so cross-company questions work; the filter is
+// applied by the caller only when the question clearly scopes to one company.
+function buildQAPrompt(records, question, opts) {
+  var o = opts || {};
+  // A record a human looked at and rejected is a wrong record. It must not reach
+  // the model at all, let alone under a heading calling it reviewed.
+  var all = records || [];
+  var usable = all.filter(function (r) { return !(r.review && r.review.status === 'rejected'); });
+  var excluded = all.length - usable.length;
+  var payload = usable.map(function (r) {
+    return {
+      company: r.company,
+      quarter: r.quarter,
+      source: r.source,
+      currency: r.currency,
+      review_status: r.review && r.review.status,
+      core: r.core,
+      quotes: r.quotes,
+      segments: r.segments,
+      outlook: r.outlook
+    };
+  });
+  var approved = payload.filter(function (r) { return r.review_status === 'approved'; }).length;
+  var header = 'Records available to answer from: ' + payload.length +
+    ' (' + approved + ' human-approved, ' + (payload.length - approved) + ' still pending review).' +
+    (excluded ? ' ' + excluded + ' rejected record(s) were withheld.' : '');
+  var user = [
+    header,
+    'A record still pending review has not been checked by a person — say so when you rely on one.',
+    '',
+    JSON.stringify(payload, null, o.pretty === false ? 0 : 1),
+    '',
+    'Question: ' + String(question == null ? '' : question)
+  ].join('\n');
+  return { system: QA_SYSTEM, user: user, record_count: payload.length, excluded_rejected: excluded };
+}
+
+// Models occasionally wrap JSON in a fence or add a sentence around it despite
+// instructions. Recover the object rather than failing the whole extraction.
+function parseModelJSON(text) {
+  var s = String(text == null ? '' : text).trim();
+  var fence = /```(?:json)?\s*([\s\S]*?)```/i.exec(s);
+  if (fence) s = fence[1].trim();
+  try { return JSON.parse(s); } catch (e) { /* fall through to brace scan */ }
+
+  var start = s.indexOf('{');
+  if (start === -1) throw new Error('no JSON object found in model output');
+  var depth = 0, inStr = false, esc = false;
+  for (var i = start; i < s.length; i++) {
+    var ch = s[i];
+    if (inStr) {
+      if (esc) esc = false;
+      else if (ch === '\\') esc = true;
+      else if (ch === '"') inStr = false;
+      continue;
+    }
+    if (ch === '"') inStr = true;
+    else if (ch === '{') depth++;
+    else if (ch === '}') {
+      depth--;
+      if (depth === 0) return JSON.parse(s.slice(start, i + 1));
+    }
+  }
+  throw new Error('unterminated JSON object in model output');
+}
+
+/* --------------------------------------------------------------- workbook -- */
+
+// Builds a renderer-agnostic model of the four-sheet workbook. The dashboard
+// feeds this to SheetJS; tests assert on it directly without a spreadsheet.
+// Every populated Core Financials cell carries a comment pointing at its
+// COMPANY|metric row in "Sources & Quotes", so a reader can verify any number
+// without leaving the workbook.
+function buildWorkbookModel(records, opts) {
+  var o = opts || {};
+  // A record a human rejected is a wrong record: it is withheld unconditionally,
+  // not merely when the reviewedOnly toggle is on. reviewedOnly then narrows
+  // further, to records a person has positively approved.
+  var rows = (records || []).filter(function (r) {
+    return !(r.review && r.review.status === 'rejected');
+  });
+  if (o.reviewedOnly) {
+    rows = rows.filter(function (r) { return r.review && r.review.status === 'approved'; });
+  }
+  rows.sort(function (a, b) { return String(a.company || '').localeCompare(String(b.company || '')); });
+
+  var DASH = '—';
+  var comments = [];
+  var colLetter = function (n) {
+    var s = '';
+    n = n + 1;
+    while (n > 0) { var m = (n - 1) % 26; s = String.fromCharCode(65 + m) + s; n = Math.floor((n - 1) / 26); }
+    return s;
+  };
+
+  // A figure is only uniquely addressable once the quarter is part of its key —
+  // storage holds more than one quarter as soon as anyone backfills.
+  var refFor = function (r, key) {
+    return (r.company || 'Unknown') + '|' + (r.quarter || 'Unknown') + '|' + key;
+  };
+
+  /* Core Financials: companies as rows, metrics as columns. */
+  var coreHeader = ['Company', 'Quarter', 'Currency', 'Unit', 'Source'];
+  CORE_METRICS.forEach(function (m) { coreHeader.push(m.label); });
+  var coreAoa = [coreHeader];
+  var META_COLS = coreHeader.length - CORE_METRICS.length;
+
+  rows.forEach(function (r, rowIdx) {
+    var line = [
+      r.company || DASH,
+      r.quarter || DASH,
+      (r.currency && r.currency.code) || DASH,
+      (r.currency && r.currency.unit) || DASH,
+      r.source || DASH
+    ];
+    CORE_METRICS.forEach(function (m, mi) {
+      var v = r.core ? r.core[m.key] : null;
+      line.push(isNum(v) ? v : DASH);
+      if (isNum(v)) {
+        var ref = refFor(r, m.key);
+        var quote = (r.quotes && r.quotes[m.key]) || '';
+        comments.push({
+          sheet: 'Core Financials',
+          addr: colLetter(META_COLS + mi) + (rowIdx + 2),
+          ref: ref,
+          text: quote
+            ? 'Source quote (' + ref + '): "' + quote + '"'
+            : 'No source quote stored for ' + ref + ' — unverified.'
+        });
+      }
+    });
+    coreAoa.push(line);
+  });
+
+  /* Segments: channel + product-category breakdowns. */
+  var segHeader = ['Company', 'Quarter'];
+  CHANNEL_KEYS.forEach(function (k) { segHeader.push('Channel: ' + k); });
+  PRODUCT_KEYS.forEach(function (k) { segHeader.push('Product: ' + k); });
+  var segAoa = [segHeader];
+  rows.forEach(function (r) {
+    var line = [r.company || DASH, r.quarter || DASH];
+    var ch = (r.segments && r.segments.channels) || {};
+    var pc = (r.segments && r.segments.product_categories) || {};
+    CHANNEL_KEYS.forEach(function (k) { line.push(isNum(ch[k]) ? ch[k] : DASH); });
+    PRODUCT_KEYS.forEach(function (k) { line.push(isNum(pc[k]) ? pc[k] : DASH); });
+    segAoa.push(line);
+  });
+
+  /* Outlook: paraphrased management commentary. */
+  var outAoa = [['Company', 'Quarter', 'Commentary', 'Raw Material Trend', 'Capex']];
+  rows.forEach(function (r) {
+    var ol = r.outlook || {};
+    outAoa.push([
+      r.company || DASH,
+      r.quarter || DASH,
+      ol.commentary || DASH,
+      ol.rm_trend || DASH,
+      ol.capex || DASH
+    ]);
+  });
+
+  /* Sources & Quotes: the audit sheet every Core Financials cell points at. */
+  var srcAoa = [['Ref', 'Company', 'Quarter', 'Metric', 'Value', 'Currency', 'Unit', 'Source Quote', 'Verification', 'Source']];
+  rows.forEach(function (r) {
+    var vmap = {};
+    if (r.verification && r.verification.checks) {
+      r.verification.checks.forEach(function (c) { vmap[c.key] = c.status; });
+    }
+    CORE_METRICS.forEach(function (m) {
+      var v = r.core ? r.core[m.key] : null;
+      var q = (r.quotes && r.quotes[m.key]) || '';
+      if (!isNum(v) && !q) return;
+      srcAoa.push([
+        refFor(r, m.key),
+        r.company || DASH,
+        r.quarter || DASH,
+        m.label,
+        isNum(v) ? v : DASH,
+        (r.currency && r.currency.code) || DASH,
+        (r.currency && r.currency.unit) || DASH,
+        q || DASH,
+        vmap[m.key] || (q ? 'unchecked' : 'unquoted'),
+        r.source || DASH
+      ]);
+    });
+  });
+
+  return {
+    generated_for: rows.length,
+    sheets: [
+      { name: 'Core Financials', aoa: coreAoa, widths: [22, 12, 10, 10, 26].concat(CORE_METRICS.map(function () { return 16; })), freeze: 'F2' },
+      { name: 'Segments',        aoa: segAoa,  widths: [22, 12].concat(CHANNEL_KEYS.concat(PRODUCT_KEYS).map(function () { return 16; })), freeze: 'C2' },
+      { name: 'Outlook',         aoa: outAoa,  widths: [22, 12, 70, 40, 40], freeze: 'C2', wrap: [2, 3, 4] },
+      { name: 'Sources & Quotes', aoa: srcAoa, widths: [26, 22, 12, 22, 14, 10, 10, 80, 14, 40], freeze: 'B2', wrap: [7] }
+    ],
+    comments: comments
+  };
+}
+
+/* ----------------------------------------------------------------- export -- */
+
+var TyreCore = {
+  SCHEMA_HINT: SCHEMA_HINT,
+  CORE_METRICS: CORE_METRICS,
+  CORE_KEYS: CORE_KEYS,
+  CHANNEL_KEYS: CHANNEL_KEYS,
+  PRODUCT_KEYS: PRODUCT_KEYS,
+  OUTLOOK_KEYS: OUTLOOK_KEYS,
+  FX_TO_INR: FX_TO_INR,
+  QUOTE_MATCH_THRESHOLD: QUOTE_MATCH_THRESHOLD,
+  SOURCE_CHAR_BUDGET: SOURCE_CHAR_BUDGET,
+  EXTRACTION_SYSTEM: EXTRACTION_SYSTEM,
+  QA_SYSTEM: QA_SYSTEM,
+  STORAGE_KEY: 'tyre-records-v2',
+
+  isNum: isNum,
+  fxToInr: fxToInr,
+  toInrCrore: toInrCrore,
+  formatMetric: formatMetric,
+  recordId: recordId,
+  recToStoredShape: recToStoredShape,
+  validateStored: validateStored,
+  normalizeForMatch: normalizeForMatch,
+  quoteMatchScore: quoteMatchScore,
+  verifyQuotes: verifyQuotes,
+  quarterSortKey: quarterSortKey,
+  computeDeltas: computeDeltas,
+  selectFinancialText: selectFinancialText,
+  buildExtractionPrompt: buildExtractionPrompt,
+  buildQAPrompt: buildQAPrompt,
+  parseModelJSON: parseModelJSON,
+  buildWorkbookModel: buildWorkbookModel
+};
+
+if (typeof window !== 'undefined') { window.TyreCore = TyreCore; }
+if (typeof globalThis !== 'undefined') { globalThis.TyreCore = TyreCore; }
+/* ==== TYRE-CORE:END ==== */
+})();
+</script>
+
+<script>
+const Core = window.TyreCore;
+const STORAGE_KEY = Core.STORAGE_KEY;
 let records = [];
 let editingId = null;
 let competeSelected = new Set();
@@ -418,6 +1409,10 @@ function normalizeCompanyName(name){
 }
 const $ = (id) => document.getElementById(id);
 function esc(s){ return (s||'').replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
+// esc() is for element text. A value going inside an attribute must also escape
+// the quote characters, or a reviewer name like Ana "AK" Kaur closes the
+// attribute early and injects the rest as markup.
+function escAttr(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function fmt(v, suffix){ return (v===null || v===undefined || v==='') ? '—' : (v + (suffix||'')); }
 function round2(v){ return (v===null || v===undefined) ? null : Math.round(v*100)/100; }
 
@@ -580,16 +1575,83 @@ function deltaCell(deltas, key, isPP){
 }
 
 // ---- storage ----
+// window.storage exists inside the Claude artifact runtime and nowhere else. Opened
+// as a plain file or served from a local http server, the original code lost every
+// record on reload. `store` keeps that async get/set surface and falls back to
+// localStorage, then to memory, so the same two calls below work in all three
+// places. Inside the artifact runtime this is window.storage untouched.
+const store = (function(){
+  if (window.storage && typeof window.storage.get === 'function' && typeof window.storage.set === 'function'){
+    return { mode: 'artifact', label: 'Artifact runtime storage — records persist with this artifact.', get: (k, s) => window.storage.get(k, s), set: (k, v, s) => window.storage.set(k, v, s) };
+  }
+  try{
+    const probe = '__tyre_probe__';
+    window.localStorage.setItem(probe, '1');
+    window.localStorage.removeItem(probe);
+    return {
+      mode: 'localStorage',
+      label: 'Browser localStorage — records stay in this browser, on this origin, until you clear site data. Keep JSON backups.',
+      get: async (k) => { const v = window.localStorage.getItem(k); return v === null ? null : { value: v }; },
+      set: async (k, v) => { window.localStorage.setItem(k, v); },
+    };
+  }catch(e){
+    const mem = {};
+    return {
+      mode: 'memory',
+      label: 'Memory only — this browser is blocking storage (opening the file directly with file:// often does), so nothing will survive a reload. Back up to JSON before you close the tab.',
+      get: async (k) => (k in mem ? { value: mem[k] } : null),
+      set: async (k, v) => { mem[k] = v; },
+    };
+  }
+})();
+
+function renderStorageNotice(){
+  const el = $('storage-notice');
+  el.className = 'notice' + (store.mode === 'memory' ? ' warn' : '');
+  el.innerHTML = '<b>Storage: ' + esc(store.mode) + '</b> — ' + esc(store.label) + ' Key: ' + esc(STORAGE_KEY) + '.';
+}
+
+// A record with no review field is one that predates the review gate — it is
+// PENDING, never approved. Legacy data is not silently trusted.
+function ensureReview(r){
+  const rev = (r.review && typeof r.review === 'object') ? r.review : {};
+  const status = (rev.status === 'approved' || rev.status === 'rejected') ? rev.status : 'pending';
+  r.review = {
+    status: status,
+    reviewer: rev.reviewer ?? null,
+    reviewed_at: rev.reviewed_at ?? null,
+    note: rev.note ?? null,
+    flags: Array.isArray(rev.flags) ? rev.flags.slice() : [],
+  };
+  return r.review;
+}
+// Fills in schema keys an older or partial record is missing, so it can be shown
+// and validated without inventing a single value — everything absent becomes null.
+function ensureCoreShape(r){
+  r.core = r.core || {};
+  Core.CORE_KEYS.forEach(k => { if (!(k in r.core)) r.core[k] = null; });
+  r.quotes = r.quotes || {};
+  r.segments = r.segments || {};
+  r.segments.channels = r.segments.channels || {};
+  r.segments.product_categories = r.segments.product_categories || {};
+  Core.CHANNEL_KEYS.forEach(k => { if (!(k in r.segments.channels)) r.segments.channels[k] = null; });
+  Core.PRODUCT_KEYS.forEach(k => { if (!(k in r.segments.product_categories)) r.segments.product_categories[k] = null; });
+  r.outlook = r.outlook || {};
+  Core.OUTLOOK_KEYS.forEach(k => { if (!(k in r.outlook)) r.outlook[k] = ''; });
+  return r;
+}
+function hydrate(r){ ensureCoreShape(r); ensureCurrency(r); ensureQuotes(r); ensureReview(r); return r; }
+
 async function loadRecords(){
   try{
-    const res = await window.storage.get(STORAGE_KEY, false);
+    const res = await store.get(STORAGE_KEY, false);
     records = res ? JSON.parse(res.value) : [];
   }catch(e){ records = []; }
-  records.forEach(r => { ensureCurrency(r); ensureQuotes(r); });
-  renderRecords(); renderDashboard(); renderCompeteChips(); renderCompete();
+  records.forEach(r => { hydrate(r); });
+  renderRecords(); renderReview(); renderDashboard(); renderCompeteChips(); renderCompete();
 }
 async function saveRecords(){
-  try{ await window.storage.set(STORAGE_KEY, JSON.stringify(records), false); }
+  try{ await store.set(STORAGE_KEY, JSON.stringify(records), false); }
   catch(e){ toast('Save failed — try again'); }
 }
 
@@ -598,6 +1660,11 @@ function num(id){ const v = $(id).value; return v === '' ? null : parseFloat(v);
 function setNum(id, v){ $(id).value = (v === null || v === undefined) ? '' : v; }
 
 function readForm(){
+  // The form edits eight of the twenty-one quotes. An extracted record now carries a
+  // quote for every metric, so the ones with no input keep whatever they had rather
+  // than being silently dropped by an unrelated edit.
+  const prior = editingId ? records.find(r => r.id === editingId) : null;
+  const keptQuotes = Object.assign({}, (prior && prior.quotes) || {});
   return {
     id: editingId || (Date.now() + '-' + Math.random().toString(36).slice(2,7)),
     company: normalizeCompanyName($('f-company').value),
@@ -611,16 +1678,18 @@ function readForm(){
       total_assets: num('f-total-assets'), total_liabilities: num('f-total-liabilities'), total_equity: num('f-total-equity'), cash: num('f-cash'),
       ocf: num('f-ocf'), capex_amt: num('f-capex-amt'), fcf: num('f-fcf'), inv_turnover: num('f-inv-turnover'), dso: num('f-dso'), dpo: num('f-dpo'),
     },
-    quotes: {
+    quotes: Object.assign(keptQuotes, {
       revenue: $('q-revenue').value.trim(), ebitda: $('q-ebitda').value.trim(), ebitda_margin: $('q-ebitda-margin').value.trim(),
       pat: $('q-pat').value.trim(), net_margin: $('q-net-margin').value.trim(), roe: $('q-roe').value.trim(),
       roce: $('q-roce').value.trim(), debt_equity: $('q-de').value.trim(),
-    },
+    }),
     segments: {
       channels: { replacement: num('f-ch-rep'), oem: num('f-ch-oem'), export: num('f-ch-exp') },
       product_categories: { TBR: num('f-pc-tbr'), TBB: num('f-pc-tbb'), PCR: num('f-pc-pcr'), '2W': num('f-pc-2w'), OHT: num('f-pc-oht') },
     },
     outlook: { commentary: $('f-out-comm').value.trim(), rm_trend: $('f-out-rm').value.trim(), capex: $('f-out-capex').value.trim() },
+    review: prior ? prior.review : null,
+    verification: prior ? prior.verification : null,
   };
 }
 function fillForm(r){
@@ -672,11 +1741,26 @@ $('entry-form').addEventListener('submit', async (e) => {
   const hasAnyOutlook = rec.outlook.commentary || rec.outlook.rm_trend || rec.outlook.capex;
   if (!hasAnyCore && !hasAnySegment && !hasAnyOutlook){ toast('Add at least one figure — company and quarter alone isn\'t a record'); return; }
   const idx = records.findIndex(r => r.id === rec.id);
+  // A hand-edited record is a changed record: it goes back to pending, and any
+  // machine verification it carried is marked as predating the edit. Approval
+  // applies to the numbers a person actually looked at, not to the id.
+  const prior = idx >= 0 ? records[idx] : null;
+  const changed = prior ? reviewableContent(prior) !== reviewableContent(rec) : true;
+  ensureReview(rec);
+  if (changed){
+    if (rec.verification) rec.verification = Object.assign({}, rec.verification, { edited_after_check: true });
+    if (prior && prior.review && prior.review.status !== 'pending'){
+      rec.review = { status: 'pending', reviewer: null, reviewed_at: null,
+        note: 'Was ' + prior.review.status + ' — edited by hand on ' + new Date().toLocaleString() + ', needs re-review.',
+        flags: rec.review.flags };
+      toast('Edited — back to pending for re-review');
+    }
+  }
   if (idx >= 0) records[idx] = rec; else records.push(rec);
   await saveRecords();
   clearForm();
-  toast('Saved');
-  renderRecords(); renderDashboard(); renderCompeteChips(); renderCompete();
+  if (!changed || !prior || prior.review.status === 'pending') toast('Saved');
+  renderRecords(); renderReview(); renderDashboard(); renderCompeteChips(); renderCompete();
 });
 $('cancel-edit').addEventListener('click', clearForm);
 
@@ -716,7 +1800,8 @@ function renderRecords(){
       const hasExtra = Object.values(r.segments.channels).some(v=>v!=null) || Object.values(r.segments.product_categories).some(v=>v!=null)
         || r.outlook.commentary || r.outlook.rm_trend || r.outlook.capex
         || Object.values(r.quotes || {}).some(v => v);
-      html += '<div class="record-card"><div class="top"><div><div class="quarter">' + esc(r.quarter) + '</div><div class="source">source: ' + esc(r.source || 'Manual entry') + '</div></div>'
+      ensureReview(r);
+      html += '<div class="record-card"><div class="top"><div><div class="quarter">' + esc(r.quarter) + ' ' + statusBadge(r) + ' ' + verificationBadge(r) + '</div><div class="source">source: ' + esc(r.source || 'Manual entry') + '</div></div>'
         + '<div class="row-actions"><button onclick="editRecord(\'' + r.id + '\')">Edit</button><button onclick="deleteRecord(\'' + r.id + '\')">Delete</button></div></div>'
         + '<div class="record-core">'
         + '<div><div class="k">Revenue (₹ Cr)</div><div class="v">' + fmt(n.revenue) + deltaCell(d,'revenue',false) + '</div>' + origNote(r) + '</div>'
@@ -759,7 +1844,11 @@ function renderRecords(){
           + (r.outlook.rm_trend ? '<div class="detail-text"><b>RM cost trend</b>' + esc(r.outlook.rm_trend) + '</div>' : '')
           + (r.outlook.capex ? '<div class="detail-text"><b>Capex plans</b>' + esc(r.outlook.capex) + '</div>' : '')
           + (Object.values(q).some(v=>v) ? '<div class="detail-text"><b>Source quotes</b>'
-              + Object.entries(q).filter(([k,v])=>v).map(([k,v]) => '<div class="quote-line"><b>' + esc(k) + ':</b> ' + esc(v) + '</div>').join('')
+              + (function(){ const cm = checkMapFor(r); return Object.entries(q).filter(([k,v])=>v).map(([k,v]) => {
+                  const chk = cm[k];
+                  const mark = chk ? ' <span class="badge ' + (chk.status === 'verified' ? 'approved' : 'fail') + '">' + esc(CHECK_LABEL[chk.status] || chk.status) + '</span>' : '';
+                  return '<div class="quote-line"><b>' + esc(k) + ':</b> ' + esc(v) + mark + '</div>';
+                }).join(''); })()
               + '</div>' : '')
           + '</div>';
       }
@@ -788,9 +1877,186 @@ window.deleteRecord = async (id) => {
   records = records.filter(r => r.id !== id);
   competeSelected.delete(id);
   await saveRecords();
-  renderRecords(); renderDashboard(); renderCompeteChips(); renderCompete();
+  renderRecords(); renderReview(); renderDashboard(); renderCompeteChips(); renderCompete();
   toast('Deleted');
 };
+
+// ---- review / approval gate (build spec Section 4, Stage 4) ----
+// Extraction produces candidates. Nothing here is treated as final until a person
+// has looked at each figure beside the quote it came from and clicked once. There
+// is no bulk approve and no auto-accept, at any scale — that gate is the safety
+// property the rest of this design rests on.
+let reviewFilter = 'pending';
+let reviewerName = '';
+
+// The parts of a record a review decision is actually about. Used to notice that
+// an approved record has since been edited by hand.
+//
+// currency belongs in here: the figures are meaningless without their scale, so
+// switching a record from INR/Crore to USD/Million changes every number on every
+// chart and in the workbook by two orders of magnitude while the stored digits
+// stay put. Leaving it out let an approval survive exactly that edit.
+function reviewableContent(r){
+  return JSON.stringify([r.company, r.quarter, r.currency, r.core, r.quotes, r.segments, r.outlook]);
+}
+function reviewCounts(){
+  const c = { pending: 0, approved: 0, rejected: 0, failing: 0 };
+  records.forEach(r => {
+    const st = (r.review && r.review.status) || 'pending';
+    c[st] = (c[st] || 0) + 1;
+    if (r.verification && r.verification.ok === false) c.failing++;
+  });
+  return c;
+}
+const CHECK_LABEL = {
+  verified: 'verified',
+  not_found: 'quote not in document',
+  value_not_in_quote: 'figure not in quote',
+  unquoted: 'no quote stored',
+};
+function checkMapFor(r){
+  const map = {};
+  if (r.verification && Array.isArray(r.verification.checks)){
+    r.verification.checks.forEach(c => { map[c.key] = c; });
+  }
+  return map;
+}
+// One-line verification state, reused by the records view.
+function verificationBadge(r){
+  const v = r.verification;
+  if (!v) return '<span class="badge unquoted" title="No machine quote-check was stored for this record">not checked</span>';
+  // A check that came in with a file was run against a document this dashboard
+  // never saw, and source documents are not retained, so it can never be
+  // re-checked here. Never render it as though we verified it ourselves.
+  if (v.checked_elsewhere) return '<span class="badge unquoted" title="' + escAttr('This record arrived with a quote-check from ' + (v.checked_origin || 'another tool') + '. It was not re-checked here, and cannot be — source documents are not kept.') + '">verified elsewhere</span>';
+  if (v.ok === false) return '<span class="badge fail" title="' + escAttr(v.failed + ' of ' + v.checked + ' quote checks failed') + '">' + v.failed + ' quote check' + (v.failed === 1 ? '' : 's') + ' failed</span>';
+  if (v.unquoted) return '<span class="badge unquoted" title="Figures reported with no quote at all">' + v.unquoted + ' unquoted</span>';
+  return '<span class="badge approved" title="' + escAttr(v.verified + ' quotes matched the source document') + '">quotes verified</span>';
+}
+function statusBadge(r){
+  const st = (r.review && r.review.status) || 'pending';
+  return '<span class="badge ' + st + '">' + st + '</span>';
+}
+
+function renderReview(){
+  const counts = reviewCounts();
+  const tabCount = $('tab-review-count');
+  if (tabCount) tabCount.textContent = counts.pending ? '(' + counts.pending + ')' : '';
+
+  $('review-counts').innerHTML =
+      '<div class="count-pill pending"><div class="n">' + counts.pending + '</div><div class="l">pending</div></div>'
+    + '<div class="count-pill approved"><div class="n">' + counts.approved + '</div><div class="l">approved</div></div>'
+    + '<div class="count-pill rejected"><div class="n">' + counts.rejected + '</div><div class="l">rejected</div></div>'
+    + '<div class="count-pill' + (counts.failing ? ' rejected' : '') + '"><div class="n">' + counts.failing + '</div><div class="l">failed quote check</div></div>';
+
+  const filters = [['pending','Pending'],['approved','Approved'],['rejected','Rejected'],['all','All records']];
+  $('review-filter-chips').innerHTML = filters.map(([k,label]) =>
+    '<button type="button" class="chip' + (reviewFilter === k ? ' on' : '') + '" data-filter="' + k + '">' + label + '</button>').join('')
+    + '<label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text-mute);margin-left:8px;">Reviewer <input id="reviewer-name" type="text" placeholder="your name (optional)" value="' + escAttr(reviewerName) + '" style="width:170px;"></label>';
+
+  renderAskHint();
+  const shown = records.filter(r => reviewFilter === 'all' || ((r.review && r.review.status) || 'pending') === reviewFilter);
+  const wrap = $('review-wrap');
+  if (!records.length){ wrap.innerHTML = '<div class="empty"><div class="big">—</div>No records yet. Upload a document, import a pipeline run, or add one by hand.</div>'; return; }
+  if (!shown.length){ wrap.innerHTML = '<div class="empty">Nothing ' + esc(reviewFilter) + ' right now.</div>'; return; }
+
+  wrap.innerHTML = shown.slice().sort((a,b) =>
+    (a.company || '').localeCompare(b.company || '') || (a.quarter || '').localeCompare(b.quarter || '')
+  ).map(r => {
+    const rev = ensureReview(r);
+    const v = r.verification;
+    const checks = checkMapFor(r);
+    const cur = ensureCurrency(r);
+    const cls = 'rv-card ' + rev.status + (v && v.ok === false ? ' verifyfail' : '');
+
+    let banners = '';
+    if (v && v.ok === false){
+      const bits = [];
+      if (v.not_found) bits.push(v.not_found + ' quote' + (v.not_found === 1 ? '' : 's') + ' could not be found in the source document');
+      if (v.value_not_in_quote) bits.push(v.value_not_in_quote + ' quote' + (v.value_not_in_quote === 1 ? ' is real but does not contain the figure' : 's are real but do not contain their figures') + ' — usually a number read from the wrong comparative column');
+      banners += '<div class="rv-alarm">Quote check failed: ' + esc(bits.join('; ')) + '. Do not approve this without opening the filing.</div>';
+    }
+    if (v && v.unquoted) banners += '<div class="rv-warn">' + v.unquoted + ' figure' + (v.unquoted === 1 ? ' was' : 's were') + ' reported with no quote at all. Nothing can verify them — check them against the filing yourself.</div>';
+    if (v && v.edited_after_check) banners += '<div class="rv-warn">This record was edited by hand after the check below ran. The check describes the extraction, not what is stored now.</div>';
+    if (!v) banners += '<div class="rv-warn">No machine quote-check on this record — it was entered by hand or imported without one. Source documents are not kept, so quotes can only be checked at extraction time.</div>';
+
+    const rows = Core.CORE_METRICS.map(m => {
+      const val = r.core ? r.core[m.key] : null;
+      const quote = (r.quotes && r.quotes[m.key]) || '';
+      if (!Core.isNum(val) && !quote) return '';
+      const chk = checks[m.key];
+      const status = chk ? chk.status : (quote ? 'unchecked' : (Core.isNum(val) ? 'unquoted' : 'unchecked'));
+      const flagged = rev.flags.indexOf(m.key) !== -1;
+      const rowCls = (status === 'not_found' || status === 'value_not_in_quote') ? 'bad'
+                   : (status === 'unquoted' ? 'unq' : '');
+      const label = CHECK_LABEL[status] || 'not checked';
+      const score = chk && chk.score !== undefined && status !== 'unquoted' ? ' <span style="color:var(--text-mute);">(match ' + chk.score + ')</span>' : '';
+      return '<tr class="' + rowCls + (flagged ? ' flagged' : '') + '">'
+        + '<td>' + esc(m.label) + '</td>'
+        + '<td class="val">' + esc(Core.formatMetric(val, m, cur)) + '</td>'
+        + '<td class="quote">' + (quote ? '“' + esc(quote) + '”' : '<i>no quote stored</i>') + '</td>'
+        + '<td>' + esc(label) + score + '</td>'
+        + '<td><button type="button" class="flagbtn' + (flagged ? ' on' : '') + '" data-flag="' + escAttr(m.key) + '" data-id="' + escAttr(r.id) + '">' + (flagged ? 'flagged' : 'flag') + '</button></td>'
+        + '</tr>';
+    }).join('');
+
+    const noteLine = rev.note ? '<div class="rv-note"><b>Note:</b> ' + esc(rev.note) + '</div>' : '';
+    const whenLine = rev.reviewed_at ? '<div class="rv-note">' + esc(rev.status) + ' by ' + esc(rev.reviewer || 'unnamed reviewer') + ' at ' + esc(new Date(rev.reviewed_at).toLocaleString()) + '</div>' : '';
+
+    return '<div class="' + cls + '">'
+      + '<div class="rv-head"><div><h3>' + esc(r.company || 'Unknown company') + ' — ' + esc(r.quarter || 'Unknown quarter') + '</h3>'
+      + '<div class="meta">source: ' + esc(r.source || 'Manual entry') + ' · reported in ' + esc(cur.code) + ' ' + esc(cur.unit) + '</div></div>'
+      + '<div>' + statusBadge(r) + ' ' + verificationBadge(r) + '</div></div>'
+      + banners
+      + (rows ? '<table class="rv-table"><thead><tr><th>Metric</th><th>Value as reported</th><th>Stored quote</th><th>Quote check</th><th></th></tr></thead><tbody>' + rows + '</tbody></table>'
+              : '<div class="rv-note">This record carries no core figures — only segments or commentary.</div>')
+      + noteLine + whenLine
+      + '<div class="rv-actions">'
+      + '<input type="text" id="note-' + escAttr(r.id) + '" placeholder="optional note — why you approved or rejected">'
+      + '<button type="button" class="btn btn-approve" data-decide="approved" data-id="' + escAttr(r.id) + '">Approve this record</button>'
+      + '<button type="button" class="btn btn-reject" data-decide="rejected" data-id="' + escAttr(r.id) + '">Reject</button>'
+      + '</div></div>';
+  }).join('');
+}
+
+async function decideRecord(id, status){
+  const r = records.find(x => x.id === id);
+  if (!r) return;
+  const noteEl = $('note-' + id);
+  const note = noteEl && noteEl.value.trim() ? noteEl.value.trim() : null;
+  const rev = ensureReview(r);
+  if (status === 'approved' && r.verification && r.verification.ok === false){
+    if (!confirm('This record has ' + r.verification.failed + ' figure(s) whose quote could not be traced to the source document.\n\nApproving means you have checked those figures against the filing yourself. Continue?')) return;
+  }
+  r.review = { status: status, reviewer: reviewerName.trim() || null, reviewed_at: new Date().toISOString(), note: note, flags: rev.flags };
+  await saveRecords();
+  renderReview(); renderRecords();
+  toast(status === 'approved' ? 'Approved ' + r.company + ' — ' + r.quarter : 'Rejected ' + r.company + ' — ' + r.quarter);
+}
+async function toggleFlag(id, key){
+  const r = records.find(x => x.id === id);
+  if (!r) return;
+  const rev = ensureReview(r);
+  const at = rev.flags.indexOf(key);
+  if (at === -1) rev.flags.push(key); else rev.flags.splice(at, 1);
+  await saveRecords();
+  renderReview();
+}
+$('review-wrap').addEventListener('click', (e) => {
+  const decide = e.target.closest('[data-decide]');
+  if (decide){ decideRecord(decide.dataset.id, decide.dataset.decide); return; }
+  const flag = e.target.closest('[data-flag]');
+  if (flag){ toggleFlag(flag.dataset.id, flag.dataset.flag); }
+});
+$('review-filter-chips').addEventListener('click', (e) => {
+  const chip = e.target.closest('[data-filter]');
+  if (!chip) return;
+  reviewFilter = chip.dataset.filter;
+  renderReview();
+});
+$('review-filter-chips').addEventListener('input', (e) => {
+  if (e.target.id === 'reviewer-name') reviewerName = e.target.value;
+});
 
 // ---- dashboard: automatic, all records, generic finance focus ----
 const PALETTE = ['#1c2321', '#c9711f', '#3d7a52', '#8f9089', '#8a6b4a', '#4a6c8a', '#8a4a6c'];
@@ -821,6 +2087,24 @@ function trendDatasetsFor(recs, metricPath){
   return { quarters, datasets };
 }
 function destroyChart(key){ if (charts[key]) { charts[key].destroy(); delete charts[key]; } }
+
+// Chart.js, SheetJS and pdf.js come from a CDN. Behind a firewall, offline, or in a
+// sandbox that blocks those hosts they simply are not there — so every use is
+// guarded and says which library is missing, instead of throwing a ReferenceError
+// that takes the rest of the page down with it.
+function libReady(name){ return typeof window[name] !== 'undefined'; }
+function chartUnavailable(canvasId){
+  const canvas = $(canvasId);
+  if (!canvas) return;
+  canvas.style.display = 'none';
+  const wrap = canvas.parentElement;
+  if (wrap && !wrap.querySelector('.chart-missing')){
+    const div = document.createElement('div');
+    div.className = 'chart-missing';
+    div.textContent = 'Charts need Chart.js, which did not load from its CDN in this browser session. Every figure is still readable in Records and Review, and the CSV and workbook exports are unaffected.';
+    wrap.appendChild(div);
+  }
+}
 const yScaleMode = {}; // chartKey -> 'zero' | 'min'
 window.toggleYScale = (key) => {
   yScaleMode[key] = (yScaleMode[key] === 'min') ? 'zero' : 'min';
@@ -839,6 +2123,7 @@ function yScaleOptions(key, allValues){
 }
 function lineChart(key, canvasId, quarters, datasets, yLabel){
   destroyChart(key);
+  if (!libReady('Chart')){ chartUnavailable(canvasId); return; }
   const allValues = datasets.flatMap(d => d.data);
   const yOpts = yScaleOptions(key, allValues);
   charts[key] = new Chart($(canvasId), {
@@ -854,7 +2139,7 @@ function renderDashboardCompanySelect(){
   const companies = [...new Set(records.map(r => r.company))].sort();
   if (!companies.length){ sel.innerHTML = '<option value="">No companies yet</option>'; dashboardSelectedCompany = null; return; }
   if (!dashboardSelectedCompany || !companies.includes(dashboardSelectedCompany)) dashboardSelectedCompany = companies[0];
-  sel.innerHTML = companies.map(c => '<option value="' + esc(c) + '"' + (c === dashboardSelectedCompany ? ' selected' : '') + '>' + esc(c) + '</option>').join('');
+  sel.innerHTML = companies.map(c => '<option value="' + escAttr(c) + '"' + (c === dashboardSelectedCompany ? ' selected' : '') + '>' + esc(c) + '</option>').join('');
 }
 $('dash-company-select').addEventListener('change', (e) => { dashboardSelectedCompany = e.target.value; renderDashboard(); });
 
@@ -874,7 +2159,8 @@ function renderDashboard(){
     { label: 'ROE', data: quarters.map(q => { const rec = companyRecords.find(r=>r.quarter===q); return rec ? normalizedCore(rec).roe : null; }), borderColor: PALETTE[0], backgroundColor: PALETTE[0], spanGaps:true, tension:0.25 },
     { label: 'ROCE', data: quarters.map(q => { const rec = companyRecords.find(r=>r.quarter===q); return rec ? normalizedCore(rec).roce : null; }), borderColor: PALETTE[1], backgroundColor: PALETTE[1], borderDash:[6,4], spanGaps:true, tension:0.25 },
   ];
-  charts.dashReturns = new Chart($('chart-returns'), {
+  if (!libReady('Chart')) chartUnavailable('chart-returns');
+  else charts.dashReturns = new Chart($('chart-returns'), {
     type:'line', data:{ labels: quarters, datasets: returnDatasets },
     options:{ responsive:true, maintainAspectRatio:false, scales:{ y:Object.assign({ title:{display:true,text:'%'} }, yScaleOptions('dashReturns', returnDatasets.flatMap(d=>d.data))) }, plugins:{legend:{position:'bottom'}} }
   });
@@ -890,6 +2176,7 @@ function renderDashboard(){
       borderDash: s.dash || undefined, spanGaps: true, tension: 0.25,
     }));
     destroyChart(key);
+    if (!libReady('Chart')){ chartUnavailable(canvasId); return; }
     charts[key] = new Chart($(canvasId), {
       type: 'line', data: { labels: quarters, datasets },
       options: { responsive:true, maintainAspectRatio:false, scales:{ y:Object.assign({ title:{display:true,text:yLabel} }, yScaleOptions(key, datasets.flatMap(d=>d.data))) }, plugins:{legend:{position:'bottom'}} }
@@ -977,6 +2264,8 @@ function renderCompete(){
   const chLabels = sel.map(r => r.company + '\n' + r.quarter);
   const selNormSeg = sel.map(r => normalizedSegments(r));
   destroyChart('cChannel');
+  destroyChart('cProduct');
+  if (!libReady('Chart')){ chartUnavailable('chart-c-channel'); chartUnavailable('chart-c-product'); return; }
   charts.cChannel = new Chart($('chart-c-channel'), {
     type:'bar',
     data:{ labels: chLabels, datasets:[
@@ -988,7 +2277,6 @@ function renderCompete(){
   });
 
   const cats = ['TBR','TBB','PCR','2W','OHT'];
-  destroyChart('cProduct');
   charts.cProduct = new Chart($('chart-c-product'), {
     type:'bar',
     data:{ labels: chLabels, datasets: cats.map((c,i) => ({ label:c, data: selNormSeg.map(s=>s.product_categories[c]), backgroundColor: PALETTE[i % PALETTE.length] })) },
@@ -1005,6 +2293,8 @@ document.querySelectorAll('.tab').forEach(tab => {
     $('panel-' + tab.dataset.tab).classList.add('active');
     if (tab.dataset.tab === 'dashboard') renderDashboard();
     if (tab.dataset.tab === 'compete') renderCompete();
+    if (tab.dataset.tab === 'review') renderReview();
+    if (tab.dataset.tab === 'ask') renderAskHint();
   });
 });
 
@@ -1015,6 +2305,15 @@ function exportRows(){
     const n = normalizedCore(r); const d = deltaMap[r.id]; const cur = ensureCurrency(r);
     return {
       Company: r.company, Quarter: r.quarter, Source: r.source || 'Manual entry',
+      // The review decision travels with the data. Without it a colleague handed
+      // this CSV cannot tell an approved figure from one a reviewer threw out.
+      'Review status': (r.review && r.review.status) || 'pending',
+      'Reviewed by': (r.review && r.review.reviewer) || '',
+      'Quote check': !r.verification ? 'not checked'
+        : r.verification.checked_elsewhere ? 'verified elsewhere'
+        : r.verification.ok === false ? (r.verification.failed + ' failed')
+        : r.verification.unquoted ? (r.verification.unquoted + ' unquoted')
+        : 'verified',
       'Revenue (₹ Cr)': n.revenue, 'EBITDA (₹ Cr)': n.ebitda, 'EBITDA margin (%)': n.ebitda_margin,
       'PAT (₹ Cr)': n.pat, 'Net margin (%)': n.net_margin, 'ROE (%)': n.roe, 'ROCE (%)': n.roce, 'Debt/Equity': n.debt_equity,
       'Current ratio': n.current_ratio, 'Quick ratio': n.quick_ratio, 'Interest coverage': n.interest_coverage,
@@ -1044,14 +2343,59 @@ $('export-csv-btn').addEventListener('click', () => {
   downloadBlob(csv, 'tyre_dashboard_export.csv', 'text/csv;charset=utf-8;');
   toast('CSV exported');
 });
-$('export-excel-btn').addEventListener('click', () => {
-  const rows = exportRows();
-  if (!rows.length){ toast('No records to export'); return; }
-  const ws = XLSX.utils.json_to_sheet(rows);
+// ---- four-sheet workbook (build spec Section 5) ----
+// The sheet layout, the cell comments and the "—" for a null all come from
+// Core.buildWorkbookModel, which the pipeline's tests assert on directly. This
+// function only renders that model with SheetJS: sheets in order, column widths,
+// freeze panes, wrapped text, and every comment attached to its own cell so a
+// reader can check any Core Financials number without leaving the workbook.
+function renderWorkbook(model){
   const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, 'Records');
-  XLSX.writeFile(wb, 'tyre_dashboard_export.xlsx');
-  toast('Excel exported');
+  const sheets = {};
+  model.sheets.forEach(sheet => {
+    const ws = XLSX.utils.aoa_to_sheet(sheet.aoa);
+    if (sheet.widths) ws['!cols'] = sheet.widths.map(w => ({ wch: w }));
+    if (sheet.freeze) ws['!freeze'] = sheet.freeze;
+    if (sheet.wrap && sheet.wrap.length){
+      for (let row = 0; row < sheet.aoa.length; row++){
+        sheet.wrap.forEach(col => {
+          const addr = XLSX.utils.encode_cell({ r: row, c: col });
+          if (ws[addr]) ws[addr].s = Object.assign({}, ws[addr].s, { alignment: { wrapText: true, vertical: 'top' } });
+        });
+      }
+    }
+    sheets[sheet.name] = ws;
+    XLSX.utils.book_append_sheet(wb, ws, sheet.name);
+  });
+  let attached = 0;
+  model.comments.forEach(comment => {
+    const ws = sheets[comment.sheet];
+    if (!ws || !ws[comment.addr]) return;
+    ws[comment.addr].c = [{ a: 'pipeline', t: comment.text }];
+    ws[comment.addr].c.hidden = true;
+    attached++;
+  });
+  return { wb, attached };
+}
+$('export-excel-btn').addEventListener('click', () => {
+  if (!libReady('XLSX')){
+    toast('SheetJS did not load');
+    alert('The workbook needs SheetJS (xlsx), which did not load from its CDN in this browser session.\n\nExport CSV still works — it needs no library.');
+    return;
+  }
+  const reviewedOnly = $('workbook-reviewed-only').checked;
+  const model = Core.buildWorkbookModel(records, { reviewedOnly });
+  if (!model.generated_for){
+    if (reviewedOnly && records.length){
+      alert('No approved records yet.\n\n' + records.length + ' record(s) are in storage, but none have been approved in Review. Approve what you have checked, or untick "Approved records only" to export unreviewed data deliberately.');
+    } else {
+      toast('No records to export');
+    }
+    return;
+  }
+  const { wb, attached } = renderWorkbook(model);
+  XLSX.writeFile(wb, 'tyre_workbook' + (reviewedOnly ? '_approved' : '_all_records') + '.xlsx');
+  toast('Workbook exported — ' + model.generated_for + ' record(s), ' + attached + ' cell comments');
 });
 
 // ---- full-data JSON backup / restore (raw records, not the display export) ----
@@ -1069,31 +2413,108 @@ $('restore-json-input').addEventListener('change', async (e) => {
     const text = await file.text();
     const payload = JSON.parse(text);
     const incoming = Array.isArray(payload) ? payload : payload.records;
-    if (!Array.isArray(incoming)) throw new Error('This file does not look like a valid backup.');
+    if (!Array.isArray(incoming)) throw new Error('This file is neither a dashboard backup, a pipeline records.json, nor a bare array of records.');
+
+    // Three shapes are accepted: this dashboard's own backup, the Node pipeline's
+    // runs/<run-id>/records.json, and a bare array. Only a backup written by this
+    // dashboard carries review decisions a person made here; everything else
+    // arrives pending no matter what its review field claims.
+    const isBackup = !Array.isArray(payload) && payload.backup_version !== undefined;
+    const isPipelineRun = !Array.isArray(payload) && payload.run_id !== undefined;
+    const origin = isBackup ? 'dashboard backup'
+      : isPipelineRun ? ('pipeline run ' + (payload.run_id || '') + (payload.quarter ? ' · ' + payload.quarter : '') + (payload.mode ? ' · ' + payload.mode + ' mode' : '') + (payload.model ? ' · ' + payload.model : ''))
+      : 'bare record array';
+
+    // Validate before anything is merged, so a bad file cannot half-land.
+    const accepted = [];
+    const rejected = [];
+    incoming.forEach((inc, i) => {
+      if (!inc || typeof inc !== 'object' || Array.isArray(inc)){
+        rejected.push({ label: 'entry ' + (i + 1), errs: ['not a record object'] });
+        return;
+      }
+      ensureCoreShape(inc); ensureCurrency(inc); ensureQuotes(inc);
+      const errs = Core.validateStored(inc);
+      const label = (inc.company || 'no company') + ' — ' + (inc.quarter || 'no quarter') + ' (entry ' + (i + 1) + ')';
+      if (errs.length){ rejected.push({ label, errs }); return; }
+      if (!inc.id) inc.id = Core.recordId(inc.company, inc.quarter, inc.source || null);
+
+      // A review decision is only carried in when this browser can actually vouch
+      // for it: the same record id is already here AND its reviewable content is
+      // unchanged, so the decision demonstrably was made in this dashboard about
+      // these exact figures. `backup_version` alone proves nothing — it is a key
+      // any file can declare, and trusting it let a file import its own approvals.
+      const local = records.find(r => r.id === inc.id);
+      const vouched = isBackup && local && reviewableContent(local) === reviewableContent(inc);
+      if (!vouched){
+        inc.review = { status: 'pending', reviewer: null, reviewed_at: null, note: 'Imported from ' + origin + ' on ' + new Date().toLocaleString(), flags: [] };
+      }
+
+      // Likewise the machine quote-check. A verification block in a file was
+      // produced against a document this dashboard never saw, and source
+      // documents are deliberately not retained, so the claim can never be
+      // re-checked here. Keep it for information, but never let it render as
+      // though this dashboard verified it.
+      if (inc.verification && !vouched){
+        inc.verification = Object.assign({}, inc.verification, { checked_elsewhere: true, checked_origin: origin });
+      }
+
+      ensureReview(inc);
+      accepted.push(inc);
+    });
+
+    if (!accepted.length){
+      showImportReport(file.name, origin, isBackup, 0, 0, rejected);
+      toast('Nothing imported — ' + rejected.length + ' record(s) rejected');
+      return;
+    }
+
     const merge = confirm(
-      'Restore ' + incoming.length + ' record(s) from this backup.\n\n' +
-      'OK = merge with what\'s already here (matching company+quarter records get overwritten by the backup).\n' +
-      'Cancel = replace everything currently in the dashboard with only this backup.'
+      'Import ' + accepted.length + ' record(s) from this ' + origin + '.' +
+      (rejected.length ? '\n' + rejected.length + ' record(s) failed validation and will be listed instead of imported.' : '') +
+      '\n\nRecords arrive PENDING. A review decision is kept only where this browser already ' +
+      'holds the same record unchanged, so the decision was demonstrably made here.' +
+      '\n\nOK = merge with what\'s already here (matching company+quarter records get overwritten by the file).\n' +
+      'Cancel = replace everything currently in the dashboard with only this file.'
     );
+    let updated = 0, added = 0;
     if (merge) {
-      incoming.forEach(inc => {
-        ensureCurrency(inc); ensureQuotes(inc);
-        const idx = records.findIndex(r => r.company.toLowerCase() === inc.company.toLowerCase() && r.quarter.toLowerCase() === inc.quarter.toLowerCase());
-        if (idx >= 0) records[idx] = inc; else records.push(inc);
+      accepted.forEach(inc => {
+        const idx = records.findIndex(r => String(r.company || '').toLowerCase() === String(inc.company || '').toLowerCase() && String(r.quarter || '').toLowerCase() === String(inc.quarter || '').toLowerCase());
+        if (idx >= 0) { records[idx] = inc; updated++; } else { records.push(inc); added++; }
       });
     } else {
-      incoming.forEach(inc => { ensureCurrency(inc); ensureQuotes(inc); });
-      records = incoming;
+      records = accepted;
+      added = accepted.length;
     }
     await saveRecords();
-    renderRecords(); renderDashboard(); renderCompeteChips(); renderCompete();
-    toast('Restored ' + incoming.length + ' record(s)');
+    renderRecords(); renderReview(); renderDashboard(); renderCompeteChips(); renderCompete();
+    showImportReport(file.name, origin, isBackup, added, updated, rejected);
+    toast('Imported ' + accepted.length + ' record(s)' + (rejected.length ? ' — ' + rejected.length + ' rejected' : ''));
   } catch (err) {
-    toast('Restore failed: ' + err.message);
+    toast('Import failed: ' + err.message);
+    const el = $('import-report');
+    el.style.display = 'block';
+    el.innerHTML = '<h2 style="color:var(--bad);">Import failed</h2><p class="sub">' + esc(err.message) + '</p>';
   } finally {
     e.target.value = '';
   }
 });
+function showImportReport(filename, origin, isBackup, added, updated, rejected){
+  const el = $('import-report');
+  el.style.display = 'block';
+  el.innerHTML = '<h2>Import: ' + esc(filename) + '</h2>'
+    + '<p class="sub">Read as a <b>' + esc(origin) + '</b>. Added ' + added + ', updated ' + updated + ', rejected ' + rejected.length + '. '
+    + (isBackup
+        ? 'This is a backup written by this dashboard, so the review decisions recorded in it were kept.'
+        : 'Every accepted record landed as <b>pending</b> — a file cannot approve its own contents. They are waiting in Review.')
+    + '</p>'
+    + (rejected.length
+        ? '<table class="fail-table"><thead><tr><th>Rejected record</th><th>Why</th></tr></thead><tbody>'
+          + rejected.map(r => '<tr><td>' + esc(r.label) + '</td><td class="quote">' + esc(r.errs.join('; ')) + '</td></tr>').join('')
+          + '</tbody></table>'
+        : '<div class="rv-note">Nothing was rejected: every record in the file matched the shared schema.</div>');
+}
 
 // ---- upload & extract ----
 if (window.pdfjsLib) {
@@ -1101,6 +2522,7 @@ if (window.pdfjsLib) {
 }
 async function readFileAsText(file){
   if (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')){
+    if (!libReady('pdfjsLib')) throw new Error('Reading a PDF needs pdf.js, which did not load from its CDN in this browser session. Save the filing as .txt and upload that instead.');
     const buf = await file.arrayBuffer();
     const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
     let text = '';
@@ -1133,11 +2555,20 @@ const SCHEMA_HINT = {
     ocf: "number, or null (net cash from operating activities)", capex_amt: "number, or null (capital expenditure)", fcf: "number, or null (free cash flow, OCF minus capex)",
     inv_turnover: "number, or null (inventory turnover ratio, times per year)", dso: "number, or null (days sales outstanding)", dpo: "number, or null (days payable outstanding)"
   },
+  // One quote per core metric — the same keys as core, per the build spec's schema.
+  // A figure with no quote cannot be verified by anyone, so every figure gets asked
+  // for one; an empty string stays the honest answer when none can be copied.
   core_quotes: {
     revenue: "a very short exact quote (max ~15 words) from the source stating this figure, or empty string if not directly quotable",
     ebitda: "short exact quote or empty string", ebitda_margin: "short exact quote or empty string",
     pat: "short exact quote or empty string", net_margin: "short exact quote or empty string",
-    roe: "short exact quote or empty string", roce: "short exact quote or empty string", debt_equity: "short exact quote or empty string"
+    roe: "short exact quote or empty string", roce: "short exact quote or empty string", debt_equity: "short exact quote or empty string",
+    current_ratio: "short exact quote or empty string", quick_ratio: "short exact quote or empty string",
+    interest_coverage: "short exact quote or empty string", total_assets: "short exact quote or empty string",
+    total_liabilities: "short exact quote or empty string", total_equity: "short exact quote or empty string",
+    cash: "short exact quote or empty string", ocf: "short exact quote or empty string",
+    capex_amt: "short exact quote or empty string", fcf: "short exact quote or empty string",
+    inv_turnover: "short exact quote or empty string", dso: "short exact quote or empty string", dpo: "short exact quote or empty string"
   },
   segments: {
     channels: { replacement: "number or null", oem: "number or null", export: "number or null" },
@@ -1146,7 +2577,94 @@ const SCHEMA_HINT = {
   outlook: { commentary: "1-3 sentence paraphrase, no verbatim quotes, or empty string", rm_trend: "1 sentence, or empty string", capex: "1 sentence, or empty string" }
 };
 
-async function extractWithClaude(sourceText){
+// ---- Claude API access ----
+// The key lives here, in a module variable, for the life of this tab. It is never
+// written to window.storage, never to localStorage, and never included in a backup.
+let apiKey = null;
+const CLAUDE_MODEL = 'claude-sonnet-4-6';
+
+function haveApiPath(){ return !!apiKey || store.mode === 'artifact'; }
+function renderApiKeyStatus(){
+  const el = $('api-key-status');
+  if (apiKey) el.innerHTML = 'Key set for this tab: <b>' + esc(apiKey.slice(0, 7) + '…' + apiKey.slice(-4)) + '</b>. It is gone on reload.';
+  else if (store.mode === 'artifact') el.textContent = 'No key set — calls go through the artifact runtime, which proxies them for you.';
+  else el.textContent = 'No key set. Extraction and Ask will not run until you add one.';
+  const libs = $('settings-libs');
+  if (libs) libs.innerHTML = '<b>Libraries</b>Chart.js (charts): ' + (libReady('Chart') ? 'loaded' : 'NOT loaded')
+    + ' · SheetJS (workbook): ' + (libReady('XLSX') ? 'loaded' : 'NOT loaded')
+    + ' · pdf.js (PDF reading): ' + (libReady('pdfjsLib') ? 'loaded' : 'NOT loaded')
+    + '. All three come from a CDN; anything showing NOT loaded was blocked or is offline, and the feature that needs it says so rather than failing silently.';
+}
+$('api-key-save').addEventListener('click', () => {
+  const v = $('api-key-input').value.trim();
+  if (!v){ toast('Enter a key first'); return; }
+  apiKey = v;
+  $('api-key-input').value = '';
+  renderApiKeyStatus(); renderAskHint();
+  toast('Key set for this tab only');
+});
+$('api-key-clear').addEventListener('click', () => {
+  apiKey = null;
+  $('api-key-input').value = '';
+  renderApiKeyStatus(); renderAskHint();
+  toast('Key cleared');
+});
+
+// One request path for both Claude features, so an authentication or rate-limit
+// problem reads the same way wherever it happens. With no key set the request goes
+// out exactly as it always did — headers and all — which is what keeps this working
+// unchanged inside the artifact runtime, where the call is proxied.
+async function callClaude(body){
+  const headers = { "Content-Type": "application/json" };
+  if (apiKey){
+    headers["x-api-key"] = apiKey;
+    headers["anthropic-version"] = "2023-06-01";
+    // Required for a browser-origin call to api.anthropic.com; without it the API
+    // rejects the request before it is ever authenticated.
+    headers["anthropic-dangerous-direct-browser-access"] = "true";
+  }
+  let response;
+  try {
+    response = await fetch("https://api.anthropic.com/v1/messages", { method: "POST", headers, body: JSON.stringify(body) });
+  } catch (netErr) {
+    throw new Error('Could not reach the Claude API at all (' + netErr.message + '). That is usually no network, or a browser/CORS block on this page\'s origin.');
+  }
+  if (!response.ok){
+    let detail = '';
+    try { const errBody = await response.json(); detail = (errBody && errBody.error && errBody.error.message) ? errBody.error.message : ''; } catch (e) { /* body was not JSON */ }
+    const suffix = detail ? ' — ' + detail : '';
+    if (response.status === 401 || response.status === 403){
+      throw new Error(apiKey
+        ? 'Claude rejected this API key (' + response.status + ')' + suffix + '. Check it in Settings.'
+        : 'Claude needs authentication (' + response.status + ')' + suffix + '. Add your API key in Settings — no key is only enough inside the Claude artifact runtime, which proxies the call.');
+    }
+    if (response.status === 429) throw new Error('Rate limited by the Claude API (429)' + suffix + '. Wait a moment and run it again — nothing was stored.');
+    if (response.status >= 500) throw new Error('The Claude API is failing on its side (' + response.status + ')' + suffix + '. Try again shortly — nothing was stored.');
+    throw new Error('Claude API error (' + response.status + ')' + suffix);
+  }
+  const data = await response.json();
+  if (data.stop_reason === 'refusal') throw new Error('Claude declined to complete this request (stop_reason: refusal). Nothing was stored.');
+  return data;
+}
+function claudeText(data){
+  return (data.content || []).filter(b => b.type === 'text').map(b => b.text).join('\n');
+}
+
+async function extractWithClaude(sourceText, opts){
+  const o = opts || {};
+  // Section 4, Stage 2 flags the old 60,000-character head-truncation as a real risk
+  // on a full quarterly report — the financial statements are usually well past it.
+  // selectFinancialText keeps the document whole when it fits and, when it does not,
+  // keeps the head (for company and quarter) plus the densest statement region.
+  const selection = Core.selectFinancialText(sourceText);
+  const retryBlock = (o.retryFields && o.retryFields.length)
+    ? "\n\nTHIS IS A RETRY. The previous answer failed verification: each quote below was checked back against the document and did not hold up.\n"
+      + o.retryFields.map(f => "- " + f.key + ": " + (f.status === 'not_found'
+          ? 'the quote you gave does not appear in the document at all'
+          : 'the quote appears in the document but does not contain the figure you reported (' + f.value + ') — you have most likely read the number from a different comparative column')).join('\n')
+      + "\nFor each of those fields: copy an exact span from the document that contains that figure, character for character, or return null for the figure and \"\" for its quote. Do not paraphrase, do not stitch words together from different lines, and never adjust a number so it matches a quote.\n"
+    : "";
+
   const prompt = "Extract structured company financial data from the document below.\n\n"
     + "Return ONLY a single JSON object matching this exact shape (no markdown fences, no commentary, no preamble):\n"
     + JSON.stringify(SCHEMA_HINT, null, 2)
@@ -1154,21 +2672,18 @@ async function extractWithClaude(sourceText){
     + "- Use null (or empty string for text fields) for anything not explicitly stated or directly computable. Never estimate or invent a number.\n"
     + "- Detect the reporting currency and unit/scale from the document (e.g. '₹ crore', '€ million', '₩ billion') and fill the currency object. If genuinely unclear, leave both null — the app will assume INR/Crore as a fallback, so get this right when the source states it.\n"
     + "- For core_quotes, give a short exact quote (max ~15 words) directly from the source for each figure so it can be manually verified against the document. Leave as empty string if you can't quote it directly — never fabricate a quote.\n"
+    + "- Every quote is checked back against this document automatically. A quote that is not in the document, or that does not contain the figure it supports, fails the whole record — so copy spans, never reconstruct them.\n"
     + "- Paraphrase outlook fields in your own words — do not quote the source verbatim.\n"
     + "- Numbers should be plain numbers (no currency symbols, no commas).\n"
-    + "- The segments fields are optional/tyre-specific — only fill them if the source is a tyre company reporting by channel or product category. Otherwise leave them null.\n\n"
-    + "<source_document>\n" + sourceText.slice(0, 60000) + "\n</source_document>";
+    + "- The segments fields are optional/tyre-specific — only fill them if the source is a tyre company reporting by channel or product category. Otherwise leave them null.\n"
+    + retryBlock
+    + "\n<source_document>\n" + selection.text + "\n</source_document>";
 
-  const response = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ model: "claude-sonnet-4-6", max_tokens: 1500, messages: [{ role: "user", content: prompt }] }),
-  });
-  if (!response.ok) throw new Error('Claude API error (' + response.status + ')');
-  const data = await response.json();
-  const textBlocks = (data.content || []).filter(b => b.type === 'text').map(b => b.text).join('\n');
-  const cleaned = textBlocks.replace(/```json|```/g, '').trim();
-  return JSON.parse(cleaned);
+  const data = await callClaude({ model: CLAUDE_MODEL, max_tokens: 8000, messages: [{ role: "user", content: prompt }] });
+  if (data.stop_reason === 'max_tokens'){
+    throw new Error('Claude ran out of output room (8000 tokens) before finishing the JSON, so the result would be truncated and untrustworthy. Nothing was stored.');
+  }
+  return { rec: Core.parseModelJSON(claudeText(data)), selection: selection };
 }
 
 function recToStoredShape(rec, existingId, filename){
@@ -1231,8 +2746,44 @@ function recToStoredShape(rec, existingId, filename){
       capex: (rec.outlook && rec.outlook.capex) || '',
     },
   };
+  // The schema now asks for a quote per core metric, not just the first eight —
+  // carry every one the model returned, and an empty string where it had none.
+  Core.CORE_KEYS.forEach(k => {
+    if (stored.quotes[k] === undefined){
+      const q = rec.core_quotes && rec.core_quotes[k];
+      stored.quotes[k] = typeof q === 'string' ? q : '';
+    }
+  });
+  // A freshly extracted record is a candidate, never an accepted one — including a
+  // re-extraction over a record that was approved before.
+  stored.review = { status: 'pending', reviewer: null, reviewed_at: null, note: null, flags: [] };
+  stored.verification = null;
   ensureCurrency(stored);
   return stored;
+}
+
+// Renders the audit trail of a failed verification: which figures could not be
+// traced, and which of the two ways they failed.
+function renderVerifyFailure(file, stored, verification, selection){
+  const failures = verification.checks.filter(c => c.status === 'not_found' || c.status === 'value_not_in_quote');
+  const cur = ensureCurrency(stored);
+  const byMetric = {};
+  Core.CORE_METRICS.forEach(m => { byMetric[m.key] = m; });
+  $('extract-verify-body').innerHTML =
+      '<p class="sub"><b>' + esc(stored.company || 'Unknown company') + ' — ' + esc(stored.quarter || 'Unknown quarter') + '</b>, from ' + esc(file.name) + '.'
+    + (selection && selection.truncated ? ' The filing was ' + selection.source_length.toLocaleString() + ' characters, so the financial-statement section was selected for extraction.' : '')
+    + '</p>'
+    + '<table class="fail-table"><thead><tr><th>Figure</th><th>Reported</th><th>Quote given</th><th>What went wrong</th></tr></thead><tbody>'
+    + failures.map(c => '<tr class="bad"><td>' + esc((byMetric[c.key] || {}).label || c.key) + '</td>'
+        + '<td>' + esc(Core.formatMetric(c.value, byMetric[c.key], cur)) + '</td>'
+        + '<td class="quote">' + (c.quote ? '“' + esc(c.quote) + '”' : '<i>none</i>') + '</td>'
+        + '<td>' + (c.status === 'not_found'
+            ? 'not_found — no span in your document matches this quote (best match ' + c.score + ' against a threshold of ' + verification.threshold + ')'
+            : 'value_not_in_quote — the quote is genuinely in the document, but it does not contain ' + c.value + '. Usually a figure read from the wrong comparative column.')
+        + '</td></tr>').join('')
+    + '</tbody></table>'
+    + '<p class="sub" style="margin-top:12px;">Nothing was saved. You can re-upload (a different text layer or a cleaner copy of the filing often fixes it), or add the record by hand from the figures you can see in the document.</p>';
+  $('extract-verify').style.display = 'block';
 }
 
 $('extract-btn').addEventListener('click', async () => {
@@ -1240,31 +2791,71 @@ $('extract-btn').addEventListener('click', async () => {
   const file = fileInput.files[0];
   const statusEl = $('extract-status');
   if (!file){ statusEl.textContent = 'Choose a file first.'; return; }
+  $('extract-banner').style.display = 'none';
+  $('extract-verify').style.display = 'none';
+  if (!haveApiPath()){
+    statusEl.textContent = 'No API key set — add one in Settings first.';
+    toast('Extraction needs an API key');
+    return;
+  }
 
   statusEl.textContent = 'Reading file…';
   $('extract-btn').disabled = true;
+  // The filing text is held in this local for the length of the run — it is used for
+  // extraction and for checking the quotes, and it is never written to storage
+  // (build spec Section 0, boundary 2).
   try {
     const text = await readFileAsText(file);
     statusEl.textContent = 'Asking Claude to extract the data…';
-    const rec = await extractWithClaude(text);
+    let out = await extractWithClaude(text);
+    let stored = recToStoredShape(out.rec, null, file.name);
+    // Section 4, Stage 2: the enforcement of "never fabricate a quote". Every quote
+    // has to be findable in the document it claims to come from, and has to contain
+    // the figure it was cited for.
+    stored.verification = Core.verifyQuotes(stored, text);
+
+    if (!stored.verification.ok){
+      const failed = stored.verification.checks.filter(c => c.status === 'not_found' || c.status === 'value_not_in_quote');
+      statusEl.textContent = failed.length + ' quote(s) did not check out — re-extracting once with those fields named…';
+      out = await extractWithClaude(text, { retryFields: failed });
+      stored = recToStoredShape(out.rec, null, file.name);
+      stored.verification = Core.verifyQuotes(stored, text);
+      stored.verification.retried = true;
+    }
+
+    if (!stored.verification.ok){
+      renderVerifyFailure(file, stored, stored.verification, out.selection);
+      statusEl.textContent = 'Not stored — ' + stored.verification.failed + ' figure(s) could not be traced to the document.';
+      toast('Not stored — quote verification failed');
+      return;
+    }
 
     const existing = records.find(r =>
-      r.company.toLowerCase() === (rec.company || '').toLowerCase() &&
-      r.quarter.toLowerCase() === (rec.quarter || '').toLowerCase()
+      String(r.company || '').toLowerCase() === String(stored.company || '').toLowerCase() &&
+      String(r.quarter || '').toLowerCase() === String(stored.quarter || '').toLowerCase()
     );
-    const stored = recToStoredShape(rec, existing ? existing.id : null, file.name);
-    if (existing) { const idx = records.findIndex(r => r.id === existing.id); records[idx] = stored; }
-    else records.push(stored);
+    if (existing){
+      stored.id = existing.id;
+      const idx = records.findIndex(r => r.id === existing.id);
+      records[idx] = stored;
+    } else {
+      records.push(stored);
+    }
 
     await saveRecords();
-    renderRecords(); renderDashboard(); renderCompeteChips(); renderCompete();
+    renderRecords(); renderReview(); renderDashboard(); renderCompeteChips(); renderCompete();
 
-    $('extract-banner-text').textContent = (existing ? 'Updated' : 'Added') + ': ' + stored.company + ' — ' + stored.quarter + ', from ' + file.name + '. Currency detected: ' + stored.currency.code + ' / ' + stored.currency.unit + ' (fx→₹ ' + stored.currency.fx_to_inr + ' — edit via "Edit" if you know the exact rate).';
+    const v = stored.verification;
+    $('extract-banner-text').innerHTML = esc((existing ? 'Updated' : 'Added') + ': ' + stored.company + ' — ' + stored.quarter + ', from ' + file.name + '. Currency detected: ' + stored.currency.code + ' / ' + stored.currency.unit + ' (fx→₹ ' + stored.currency.fx_to_inr + ' — edit via "Edit" if you know the exact rate).')
+      + '<br><br>' + esc(v.verified + ' of ' + v.checked + ' quoted figures verified against your document' + (v.retried ? ' (after one re-extraction)' : '') + '.')
+      + (v.unquoted ? '<br><b style="color:var(--bad);">' + v.unquoted + ' figure(s) were reported with no quote at all — nothing can verify those. They are listed in Review.</b>' : '')
+      + (out.selection && out.selection.truncated ? '<br><b>This filing was ' + out.selection.source_length.toLocaleString() + ' characters — too long to send whole, so the financial-statement section was selected for extraction.</b>' : '')
+      + '<br><br><b>Saved as pending.</b> Go to Review to check each figure against its quote and approve it.';
     $('extract-banner').style.display = 'block';
-    statusEl.textContent = 'Done.';
-    toast((existing ? 'Updated ' : 'Added ') + stored.company + ' — ' + stored.quarter);
+    statusEl.textContent = 'Done — pending review.';
+    toast((existing ? 'Updated ' : 'Added ') + stored.company + ' — pending review');
     fileInput.value = '';
-    document.querySelector('[data-tab="records"]').click();
+    document.querySelector('[data-tab="review"]').click();
   } catch (e) {
     console.error(e);
     statusEl.textContent = 'Failed: ' + e.message;
@@ -1274,6 +2865,107 @@ $('extract-btn').addEventListener('click', async () => {
   }
 });
 
+// ---- Q&A over the stored records (build spec Section 6) ----
+// The whole record set goes to the model by default, because the point of having
+// nine companies in one place is the cross-company question. Narrowing happens only
+// when a question is clearly about named companies and is not a comparison — "is
+// Apollo the best on margin?" names one company and needs all of them.
+const COMPARATIVE_RE = /\b(compare|compares|compared|comparison|versus|vs|best|worst|highest|lowest|higher|lower|top|bottom|rank|ranks|ranked|ranking|better|worse|most|least|than|across|which|who|whose|peer|peers|sector|industry|average|median|total|overall|between|among|all|every|each|any|leader|leading|outperform|strongest|weakest)\b/;
+const NAME_STOPWORDS = new Set(['tyre','tyres','industries','industry','ltd','limited','india','indian','company','co','the','and','group','international','motors','rubber']);
+
+function normalizeForNameMatch(s){
+  return ' ' + String(s || '').toLowerCase().replace(/[^a-z0-9&\s]/g, ' ').replace(/\s+/g, ' ').trim() + ' ';
+}
+function companiesNamedIn(question, companies){
+  const hay = normalizeForNameMatch(question);
+  return companies.filter(c => {
+    const name = normalizeForNameMatch(c).trim();
+    if (name && hay.indexOf(' ' + name + ' ') !== -1) return true;
+    return name.split(' ').some(tok => tok.length >= 2 && !NAME_STOPWORDS.has(tok) && hay.indexOf(' ' + tok + ' ') !== -1);
+  });
+}
+function scopeForQuestion(question){
+  const companies = [...new Set(records.map(r => r.company).filter(Boolean))];
+  const named = companiesNamedIn(question, companies);
+  const comparative = COMPARATIVE_RE.test(String(question).toLowerCase());
+  if (named.length && !comparative && named.length < companies.length){
+    return { rows: records.filter(r => named.indexOf(r.company) !== -1), narrowedTo: named };
+  }
+  return { rows: records, narrowedTo: null };
+}
+
+function appendAskMsg(kind, who, body, grounding){
+  const log = $('ask-log');
+  const el = document.createElement('div');
+  el.className = 'msg ' + kind;
+  el.innerHTML = '<div class="who">' + esc(who) + '</div><div class="body">' + esc(body) + '</div>'
+    + (grounding ? '<div class="grounding">' + esc(grounding) + '</div>' : '');
+  log.appendChild(el);
+  log.scrollTop = log.scrollHeight;
+  return el;
+}
+function renderAskHint(){
+  const approved = records.filter(r => r.review && r.review.status === 'approved').length;
+  const rejected = records.filter(r => r.review && r.review.status === 'rejected').length;
+  const pending = records.length - approved - rejected;
+  const parts = [records.length + ' record(s) in storage — ' + approved + ' approved, ' + pending + ' pending, ' + rejected + ' rejected and withheld from every answer.'];
+  if (!haveApiPath()) parts.push('No API key set: add one in Settings before asking (Settings tab).');
+  $('ask-hint').textContent = parts.join(' ');
+}
+
+let asking = false;
+async function askQuestion(){
+  if (asking) return;
+  const input = $('ask-input');
+  const question = input.value.trim();
+  if (!question) return;
+  appendAskMsg('q', 'You', question);
+  input.value = '';
+  renderAskHint();
+
+  if (!records.length){
+    appendAskMsg('err', 'Ask', 'There are no records in this browser yet, so there is nothing to answer from. Upload a filing, import a pipeline run, or add a record by hand first.');
+    return;
+  }
+  if (!haveApiPath()){
+    appendAskMsg('err', 'Ask', 'No Claude API key is set, so the question cannot be sent. Add a key in the Settings tab — it is kept in memory for this tab only. (Inside the Claude artifact runtime no key is needed, because the call is proxied there.)');
+    return;
+  }
+
+  const scope = scopeForQuestion(question);
+  const prompt = Core.buildQAPrompt(scope.rows, question);
+  const grounding = 'Grounded in ' + prompt.record_count + ' of ' + records.length + ' stored record(s)'
+    + (scope.narrowedTo ? ' — narrowed to ' + scope.narrowedTo.join(', ') + ', because the question names them and is not a comparison.' : ' — the full set, so cross-company comparisons are possible.')
+    + (prompt.excluded_rejected ? ' ' + prompt.excluded_rejected + ' rejected record(s) withheld.' : '');
+
+  asking = true;
+  $('ask-btn').disabled = true;
+  const thinking = appendAskMsg('a', 'Claude', 'Thinking…', grounding);
+  try {
+    const data = await callClaude({
+      model: CLAUDE_MODEL,
+      max_tokens: 4000,
+      system: prompt.system,
+      messages: [{ role: 'user', content: prompt.user }],
+    });
+    thinking.querySelector('.body').textContent = claudeText(data) || '(no text in the response)';
+  } catch (err) {
+    console.error(err);
+    thinking.className = 'msg err';
+    thinking.querySelector('.body').textContent = err.message;
+  } finally {
+    asking = false;
+    $('ask-btn').disabled = false;
+    $('ask-log').scrollTop = $('ask-log').scrollHeight;
+  }
+}
+$('ask-btn').addEventListener('click', askQuestion);
+$('ask-input').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)){ e.preventDefault(); askQuestion(); }
+});
+
+renderStorageNotice();
+renderApiKeyStatus();
 loadRecords();
 </script>
 </body>

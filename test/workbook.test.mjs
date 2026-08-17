@@ -243,6 +243,16 @@ test('reviewedOnly filters to approved records', () => {
     assert.ok(comment.ref.startsWith(`${approved.company}|`));
   }
 
+  // reviewedOnly narrows to positively-approved records. Turning it off widens to
+  // pending ones — but never to rejected ones: a record a human looked at and
+  // threw out must not travel onward in the deliverable, whatever the toggle says.
   const unfiltered = TyreCore.buildWorkbookModel([approved, rejected, pending]);
-  assert.equal(unfiltered.generated_for, 3, 'without reviewedOnly the export is whatever is in storage');
+  assert.equal(unfiltered.generated_for, 2, 'reviewedOnly off adds pending records, not rejected ones');
+  const companies = unfiltered.sheets[0].aoa.slice(1).map((r) => r[0]);
+  assert.ok(companies.includes(approved.company) && companies.includes(pending.company));
+  assert.ok(!companies.includes(rejected.company), 'a rejected record is withheld from every sheet');
+  assert.ok(
+    !JSON.stringify(unfiltered.sheets).includes(String(rejected.core.revenue)),
+    'no figure from a rejected record reaches any sheet'
+  );
 });

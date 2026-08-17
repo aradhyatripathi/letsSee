@@ -74,7 +74,7 @@ flowchart TD
         W["runs/&lt;run-id&gt;/\nsources/*.txt · records.json · report.md\ngitignored working space only"]
     end
 
-    subgraph browser["Dashboard — single file, localStorage 'tyre-records-v2'"]
+    subgraph browser["Dashboard — single file, window.storage 'tyre-records-v2'"]
         I["Import\ndrop or paste records.json"]
         Q["Stage 4 · Review\nfigure beside its quote\nno auto-accept, at any scale"]
         E["buildWorkbookModel → SheetJS\nCore Financials · Segments · Outlook · Sources &amp; Quotes"]
@@ -120,13 +120,26 @@ Reading the same path in prose:
    characters. The response is recovered with `parseModelJSON()`, which tolerates a fence
    or a stray sentence. No prefill, no temperature.
 
-3. **Quote verification.** `verifyQuotes()` scores every non-empty quote against the
-   retrieved text: exact substring first, otherwise best token coverage across any
-   same-length window, thresholded at 0.85. This is where "never fabricate a quote" is
-   actually enforced — a model that paraphrases scores low and the record does not pass. A
-   value reported with no quote is recorded as `unquoted` rather than silently accepted.
-   A failure re-extracts once and then reports that company as failed, with the offending
-   quotes attached, while the other eight carry on.
+3. **Quote verification.** This is where "never fabricate a quote" is actually enforced,
+   and it asks two separate questions of every non-empty quote.
+
+   *Is the quote real?* Exact substring first; failing that, a sliding window finds spans
+   whose bag of words is close, and those candidates are re-scored by longest common
+   subsequence so word order counts, thresholded at 0.85. Order matters because a quote
+   reassembled from the document's own words in an order it never used says something the
+   filing does not — scoring on the bag alone gave such a quote a perfect match.
+
+   *Is the number in it?* A genuine quote does not prove it is the sentence the figure
+   came from. These filings put three or four comparative columns side by side, so a model
+   can quote a real row label and report the prior quarter's number from it. The figure
+   must appear in its own quote, with a tolerance for rounded percentages, parentheses
+   read as the accounting convention for a loss, and period labels like `FY26` or `Q1`
+   scrubbed first so they cannot stand in for the figure they label.
+
+   A value reported with no quote at all is recorded as `unquoted` rather than silently
+   accepted. A failure re-extracts once, naming the fields that failed, and then reports
+   that company as failed with the offending quotes attached, while the other eight carry
+   on.
 
 4. **Stored shape.** `recToStoredShape()` converts the model's schema into the record the
    dashboard stores, field for field: anything not reported stays `null`, quotes stay
@@ -151,8 +164,9 @@ Reading the same path in prose:
    system prompt that makes those records the entire world.
 
    One honest caveat on formatting: the dashboard loads the SheetJS community build,
-   whose writer ignores per-cell styling (`cell.s`). Column widths, freeze panes and cell
-   comments survive the round trip; bold headers and fills do not. The data and the
+   whose writer ignores per-cell styling (`cell.s`). Column widths and cell comments
+   survive the round trip; bold headers and fills do not, and freeze panes are set but
+   unverified against the real library. The data and the
    traceability are unaffected, which is what the workbook is actually for.
 
 ## Consequences worth knowing

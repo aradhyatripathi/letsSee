@@ -340,15 +340,33 @@ function quoteMatchScore(sourceText, quote) {
 // and still report the prior quarter's number from it.
 function quoteContainsValue(quote, value) {
   if (!isNum(value)) return true;
-  var text = String(quote == null ? '' : quote);
-  var found = text.match(/-?\d[\d,]*(?:\.\d+)?/g);
+
+  // Period labels and dates are how a filing names the column, not the figure in
+  // it. Left in, they are candidate numbers: a fabricated ROCE of 26 would
+  // "verify" against the text FY26, and a 1 against Q1. Strip them first.
+  // A bare four-digit number is deliberately NOT stripped — it can be a genuine
+  // figure (revenue of 2,025 crore) and is only a year in the patterns below.
+  var scrubbed = String(quote == null ? '' : quote)
+    .replace(/\b(?:FY|CY)\s*'?\s*\d{2,4}\b/gi, ' ')
+    .replace(/\b[QH]\s*[1-4]\b/gi, ' ')
+    .replace(/\b\d{1,2}\s+(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s*,?\s*\d{2,4}\b/gi, ' ')
+    .replace(/\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s*,?\s*\d{2,4}\b/gi, ' ');
+
+  // Indian filings write a loss in the accounting convention — "(1,234.50)" —
+  // so a parenthesised figure is the negative of what it reads as. Without this
+  // a correctly-quoted loss fails the check and the whole record is thrown away.
+  var found = scrubbed.match(/\(\s*\d[\d,]*(?:\.\d+)?\s*\)|-?\d[\d,]*(?:\.\d+)?/g);
   if (!found) return false;
+
   // Percentages and ratios are often quoted rounded ("margin of 14.5%" for
   // 14.53), so allow a tolerance that scales with the figure's own magnitude.
   var tolerance = Math.max(0.05, Math.abs(value) * 0.005);
   for (var i = 0; i < found.length; i++) {
-    var n = parseFloat(found[i].replace(/,/g, ''));
-    if (isFinite(n) && Math.abs(n - value) <= tolerance) return true;
+    var token = found[i];
+    var n = parseFloat(token.replace(/[(),\s]/g, ''));
+    if (!isFinite(n)) continue;
+    if (token.charAt(0) === '(') n = -n;
+    if (Math.abs(n - value) <= tolerance) return true;
   }
   return false;
 }
@@ -577,7 +595,7 @@ var QA_SYSTEM = [
   '- "Core Financials": one row per company, one column per core metric, current quarter.',
   '- "Segments": channel (replacement/OEM/export) and product-category breakdowns.',
   '- "Outlook": commentary, raw-material trend, and capex per company.',
-  '- "Sources & Quotes": every figure with its exact source quote, keyed COMPANY|metric,',
+  '- "Sources & Quotes": every figure with its exact source quote, keyed COMPANY|QUARTER|metric,',
   '  which is what each Core Financials cell comment points at.'
 ].join('\n');
 
@@ -656,7 +674,12 @@ function parseModelJSON(text) {
 // without leaving the workbook.
 function buildWorkbookModel(records, opts) {
   var o = opts || {};
-  var rows = (records || []).slice();
+  // A record a human rejected is a wrong record: it is withheld unconditionally,
+  // not merely when the reviewedOnly toggle is on. reviewedOnly then narrows
+  // further, to records a person has positively approved.
+  var rows = (records || []).filter(function (r) {
+    return !(r.review && r.review.status === 'rejected');
+  });
   if (o.reviewedOnly) {
     rows = rows.filter(function (r) { return r.review && r.review.status === 'approved'; });
   }

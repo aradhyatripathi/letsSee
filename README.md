@@ -153,7 +153,7 @@ in storage (approved-only by default). It works for one company or all nine.
 | **Sources & Quotes** | Every figure with its exact source quote, verification status, and the source it came from. |
 
 Traceability means something specific here. Each populated Core Financials cell carries
-a cell comment keyed `COMPANY|metric` — for example `Apollo Tyres|ebitda` — and that key
+a cell comment keyed `COMPANY|QUARTER|metric` — for example `Apollo Tyres|Q1 FY26|ebitda` — and that key
 is the first column of Sources & Quotes. A reader who doubts a number hovers the cell,
 reads the quote that produced it, and can find the full row without leaving the
 workbook. A figure with no stored quote is not silently presented as equal to one: its

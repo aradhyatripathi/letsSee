@@ -513,3 +513,47 @@ test('a rejected record never reaches the Q&A model', () => {
   assert.ok(prompt.user.includes('Apollo Tyres') && prompt.user.includes('CEAT'));
   assert.ok(/1 human-approved, 1 still pending/.test(prompt.user), 'the model is told what it is looking at');
 });
+
+/* ------------------------------- quote verification, second review pass -- */
+
+// Indian filings write a loss in the accounting convention. Before this was
+// handled, a correctly-quoted loss failed the value check and the extract path
+// discarded the whole record — every other figure on that filing with it.
+test('a loss quoted in the accounting convention verifies', () => {
+  const source = 'Profit/(loss) after tax for the quarter was Rs. (1,234.50) crore.';
+  const quote = 'Profit/(loss) after tax for the quarter was Rs. (1,234.50) crore';
+
+  assert.equal(
+    TyreCore.verifyQuotes({ core: { pat: -1234.5 }, quotes: { pat: quote } }, source).checks[0].status,
+    'verified'
+  );
+  // The parenthesis carries the sign, so the same span must NOT support +1234.5.
+  assert.equal(
+    TyreCore.verifyQuotes({ core: { pat: 1234.5 }, quotes: { pat: quote } }, source).checks[0].status,
+    'value_not_in_quote'
+  );
+});
+
+// A period label is how a filing names the column, not the figure in it. Left as
+// a candidate number, "FY26" would support a fabricated ROCE of 26.
+test('a period label cannot stand in for the figure it labels', () => {
+  const source = 'Total income for Q1 FY26 stood at 6,543.21 for the quarter ended 30 June 2025.';
+  const check = (value) =>
+    TyreCore.verifyQuotes({ core: { roce: value } , quotes: { roce: source } }, source).checks[0].status;
+
+  assert.notEqual(check(26), 'verified', 'FY26 is not a ROCE of 26');
+  assert.notEqual(check(1), 'verified', 'Q1 is not a value of 1');
+  assert.notEqual(check(30), 'verified', 'the day of a date is not a value of 30');
+
+  // The figure the sentence actually states still verifies.
+  assert.equal(
+    TyreCore.verifyQuotes({ core: { revenue: 6543.21 }, quotes: { revenue: source } }, source).checks[0].status,
+    'verified'
+  );
+  // And a genuine four-digit figure is not mistaken for a year and scrubbed away.
+  const yearish = 'Revenue from operations 2,025.00 crore';
+  assert.equal(
+    TyreCore.verifyQuotes({ core: { revenue: 2025 }, quotes: { revenue: yearish } }, yearish).checks[0].status,
+    'verified'
+  );
+});

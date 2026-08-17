@@ -48,18 +48,35 @@ real. Changing the roster means editing that one list and nothing else.
 
 ## What broke, and what we did about it
 
-**The dashboard the spec said already existed was not in the repo.** Section 1 describes
-`tyre_comparison_dashboard.html` as a working ~1280-line file to build on, with
-`extractWithClaude()`, `SCHEMA_HINT`, `recToStoredShape()`, `exportRows()`, storage under
-`tyre-records-v2`, SheetJS and Chart.js already wired. It was not there, and we could not
-read it. Rather than invent a different design, we rebuilt it from the spec's own
-description of its parts and kept the names the spec quotes — the same schema, the same
-`recToStoredShape` shape field for field, the same storage key, the same function names
-where the spec names them. That is deliberate: when the real dashboard turns up, the two
-should be reconcilable by diff rather than by rewrite, and any records already in a
-reviewer's browser under `tyre-records-v2` will still load. It is still a risk worth
-flagging plainly, because the real file will have accumulated behaviour we could not
-know about, and reconciling it is a real task someone has to do.
+**The dashboard the spec said already existed was not in the repo — until it was.**
+Section 1 describes `tyre_comparison_dashboard.html` as a working ~1280-line file to build
+on. It was not there, so we rebuilt it from the spec's description, keeping the names the
+spec quotes so the two could be reconciled by diff rather than by rewrite. The real file
+then arrived, and that bet paid off: it is now the base, committed untouched first so
+every change since is a reviewable diff, and the reconstruction was discarded.
+
+Reading the real file changed several things. It is better than the reconstruction in
+ways that mattered — a manual entry form with real validation, per-record FX editing, a
+competitive-analysis view, JSON backup and restore, pdf.js reading PDFs in the browser,
+and period handling that covers calendar-year reporters and half-years, which the
+reconstruction dropped to null. Those are now the behaviour; where the two disagreed we
+took the real file's values as authoritative, including its FX rates.
+
+It also had sharp edges worth naming. `extractWithClaude` sent no authentication at all —
+just a content-type header — which works only because the Claude artifact runtime proxies
+the call on its behalf; with a real key, or served as an ordinary file, it would fail, and
+browser-origin calls additionally need `anthropic-dangerous-direct-browser-access`. Its
+schema asked for a quote for eight of the twenty-one metrics, so thirteen figures per
+record were unverifiable by construction. It truncated filings at 60,000 characters and
+capped `max_tokens` at 1,500, both of which Section 4 flags. And it had no verification,
+no review gate and a single flat sheet for Excel. Those are the gaps this week closed.
+
+One integration detail worth recording because it is the kind of thing that bites later:
+the shared core is inlined in its own script wrapped in an IIFE. The dashboard declares
+`SCHEMA_HINT`, `computeDeltas` and `recToStoredShape` at the top level and the core
+declares all three too, so a naive inline either throws on the `const` redeclaration or
+silently replaces the dashboard's versions with differently-shaped ones. Function-scoping
+the core and publishing only `TyreCore` keeps both intact.
 
 **Two copies of the data contract would have drifted immediately.** The dashboard is a
 single file by design and the pipeline is Node ES modules; both need the schema,
@@ -114,6 +131,32 @@ common subsequence, so word order counts. Both cases are pinned by tests. Worth 
 plainly: these were found by reading the code adversarially, not by any run failing — the
 141 fixture quotes passed before the fix and pass after it, which is exactly why a green
 run is not evidence that a gate works.
+
+**A second review pass found two more, in the same place.** The value check we had just
+added rejected a loss quoted the way Indian filings actually write one — `(1,234.50)` in
+the accounting convention — because it read the parentheses as punctuation rather than a
+minus sign. The consequence was worse than a false alarm: the extract path refuses to
+store a record whose quotes fail, so one loss-making quarter would have thrown away all
+twenty other correctly-verified figures on that filing with it. In the other direction,
+the same check treated every digit run in a quote as a candidate figure, so the text
+`Q1 FY26` would happily support a fabricated ROCE of 26, or a fabricated ratio of 1 — a
+hole in exactly the gate that is supposed to be load-bearing. Period labels and dates are
+now scrubbed before the figure is looked for, and a bare four-digit number is deliberately
+left alone, because it can be a real figure rather than a year.
+
+Three more turned up away from verification. The workbook exported records a reviewer had
+explicitly rejected whenever the "approved only" box was unticked, which made the primary
+deliverable the one output that circulated data a person had already thrown out. A
+currency or unit edit kept an existing approval, so switching a record from INR crore to
+USD million left it approved with every figure wrong by two orders of magnitude. And a
+file only had to declare `backup_version` to have its own review decisions trusted, which
+meant any JSON could import itself as approved. A review decision is now carried in only
+where this browser already holds that exact record unchanged: a genuine backup restores
+its approvals, a foreign file does not.
+
+The pattern across all five is worth stating once. None of them surfaced from a run. Every
+one was found by reading the code against a hostile case, and every one would have put a
+confident, plausible, wrong number in front of a reviewer.
 
 ## What would have to change for Phase 2
 
