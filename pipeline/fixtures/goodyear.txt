@@ -1,0 +1,102 @@
+*** SYNTHETIC TEST DATA — fixture for offline pipeline runs. Not a real filing. ***
+
+GOODYEAR INDIA LIMITED
+CIN: L25111HR1961PLC008578
+Registered Office: Mathura Road, Ballabgarh 121 004, District Faridabad, Haryana
+
+UNAUDITED FINANCIAL RESULTS FOR THE QUARTER ENDED 30 JUNE 2025 (Q1 FY26)
+
+REPORTING CURRENCY NOTE
+Amounts in this statement are presented in USD Million, consistent with the reporting pack
+submitted to the parent company. All figures below are in USD Million unless otherwise
+stated. The Company's statutory financial statements prepared in Indian Rupees are filed
+separately with the stock exchanges; no exchange rate has been applied to the figures in
+this statement.
+
+                                                          Quarter ended 30 June 2025
+Particulars (USD Million)                                        (Unaudited)
+--------------------------------------------------------------------------------------------------
+Revenue from operations                                              78.42
+Other income                                                          1.84
+Total income                                                         80.26
+Cost of materials consumed                                           47.13
+Purchases of stock-in-trade                                           2.20
+Changes in inventories                                               (0.42)
+Employee benefits expense                                             6.74
+Finance costs                                                         0.21
+Depreciation and amortisation expense                                 2.36
+Other expenses                                                       13.06
+Total expenses                                                       71.28
+Profit before tax                                                     8.98
+Current tax                                                           2.51
+Deferred tax                                                         (0.16)
+Total tax expense                                                     2.35
+Profit for the period                                                 6.63
+Other comprehensive income (net of tax)                               0.09
+Total comprehensive income                                            6.72
+Paid-up equity share capital (23,073,000 shares of INR 10 each)        2.76
+Earnings per share (not annualised), basic and diluted (USD)          0.29
+--------------------------------------------------------------------------------------------------
+
+Note 2 — EBITDA
+EBITDA for the quarter ended 30 June 2025 was USD 9.71 Million, an EBITDA margin of 12.4%
+of revenue from operations.
+
+BALANCE SHEET EXTRACT AS AT 30 JUNE 2025 — UNAUDITED (USD Million)
+--------------------------------------------------------------------------------------------------
+Total assets                                                        288.44
+Total equity                                                        196.12
+Total liabilities                                                    92.32
+Total borrowings                                                      8.16
+Current assets                                                      182.55
+    Inventories                                                      46.22
+    Cash and cash equivalents                                        74.28
+Current liabilities                                                  78.44
+--------------------------------------------------------------------------------------------------
+
+RATIOS FOR THE QUARTER
+Debt-equity ratio                                                      0.04
+Current ratio                                                          2.33
+Quick ratio                                                            1.74
+Interest coverage ratio                                               35.00
+Return on equity for the quarter (not annualised)                      3.4%
+Return on capital employed for the quarter (not annualised)            3.6%
+
+CASH FLOW EXTRACT FOR THE QUARTER ENDED 30 JUNE 2025 — UNAUDITED (USD Million)
+--------------------------------------------------------------------------------------------------
+Net cash generated from operating activities                           8.42
+Capital expenditure                                                    3.15
+Free cash flow                                                         5.27
+--------------------------------------------------------------------------------------------------
+
+SEGMENT NOTE — QUARTER ENDED 30 JUNE 2025
+Share of revenue from operations by channel:
+    Replacement                                                         47%
+    Original equipment                                                  44%
+    Exports                                                              9%
+
+Share of revenue from operations by product category:
+    Off-highway tyres (OHT), predominantly farm                         62%
+    Passenger car radial (PCR)                                          30%
+    Truck and bus radial (TBR)                                           5%
+    Others                                                               3%
+
+MANAGEMENT COMMENTARY
+Farm tyre demand improved through the quarter as the tractor original equipment build
+schedule recovered, and the consumer replacement channel was stable. Natural rubber costs
+remained the principal input headwind and were higher than the March quarter, while
+crude-derivative inputs including carbon black and synthetic rubber rose modestly. The
+Company has not taken a general price increase during the quarter and expects the raw
+material basket to remain broadly at current levels through the September quarter.
+
+Capital expenditure for the quarter was USD 3.15 Million, spent on farm tyre curing
+capacity and on plant safety and environment projects at Ballabgarh. Planned capital
+expenditure for the remainder of FY26 is approximately USD 12 Million and will be met from
+internal accruals.
+
+The unaudited financial results were reviewed by the Audit Committee and approved by the
+Board of Directors at its meeting held on 7 August 2025.
+
+For Goodyear India Limited
+Managing Director
+Faridabad, 7 August 2025

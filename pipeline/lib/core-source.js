@@ -245,9 +245,33 @@ function tokenize(s) {
   return out;
 }
 
-// Best coverage of `needle`'s tokens inside any same-length window of `haystack`.
-// A verbatim quote scores 1; a quote the model paraphrased or invented scores low.
-// Exact substring is checked first because that is the common, cheap case.
+// Length of the longest common subsequence of two token arrays. Order-sensitive,
+// which is the whole point: it is what stops a quote reassembled from the
+// document's own words out of order from scoring as if it were verbatim.
+function lcsLength(a, b) {
+  var prev = new Array(b.length + 1).fill(0);
+  var cur = new Array(b.length + 1).fill(0);
+  for (var i = 1; i <= a.length; i++) {
+    cur[0] = 0;
+    for (var j = 1; j <= b.length; j++) {
+      cur[j] = a[i - 1] === b[j - 1]
+        ? prev[j - 1] + 1
+        : (prev[j] > cur[j - 1] ? prev[j] : cur[j - 1]);
+    }
+    var swap = prev; prev = cur; cur = swap;
+  }
+  return prev[b.length];
+}
+
+// How well `quote` matches some span of `sourceText`. A verbatim quote scores 1;
+// a paraphrase, a fabrication, or a quote stitched together from words that all
+// appear in the document but not in that order scores below it.
+//
+// Two passes, because order matters but is expensive: a cheap sliding multiset
+// scan finds the windows worth looking at, then those candidates are re-scored
+// by longest common subsequence so word order counts. Scoring on the multiset
+// alone would give "revenue 812.44 ... profit 6,543.21" a perfect score against
+// a source that says the opposite.
 function quoteMatchScore(sourceText, quote) {
   var nq = normalizeForMatch(quote);
   if (!nq) return 0;
@@ -266,24 +290,60 @@ function quoteMatchScore(sourceText, quote) {
   var win = qt.length;
   var have = {};
   var matched = 0;
-  var best = 0;
+  var candidates = [];
+  var bestBag = 0;
 
   function add(tok) {
     have[tok] = (have[tok] || 0) + 1;
     if (want[tok] && have[tok] <= want[tok]) matched++;
   }
-  function remove(tok) {
+  function drop(tok) {
     if (want[tok] && have[tok] <= want[tok]) matched--;
     have[tok]--;
   }
 
   for (var j = 0; j < st.length; j++) {
     add(st[j]);
-    if (j >= win) remove(st[j - win]);
-    if (matched > best) best = matched;
-    if (best === win) break;
+    if (j >= win) drop(st[j - win]);
+    if (matched > bestBag) bestBag = matched;
+    // A window can only beat the current best on order if its bag of words is
+    // already close, so this is a safe filter and keeps the LCS pass bounded.
+    if (matched >= win * 0.6) candidates.push(Math.max(0, j - win + 1));
   }
-  return best / win;
+
+  // The bag score is an upper bound on the ordered score, so a bag that never
+  // gets close cannot produce a match and needs no second pass.
+  if (!candidates.length) return bestBag / win;
+
+  var STRIDE = Math.max(1, Math.ceil(candidates.length / 400));
+  var best = 0;
+  for (var c = 0; c < candidates.length; c += STRIDE) {
+    var start = candidates[c];
+    var score = lcsLength(qt, st.slice(start, start + win)) / win;
+    if (score > best) best = score;
+    if (best === 1) break;
+  }
+  return best;
+}
+
+// Does the figure actually appear in the span quoted to support it? Verifying
+// the quote against the source proves the sentence is real; it does not prove it
+// is the sentence this number came from. Indian quarterly tables carry three or
+// four comparative columns, so a model can quote a perfectly genuine row label
+// and still report the prior quarter's number from it.
+function quoteContainsValue(quote, value) {
+  if (!isNum(value)) return true;
+  var text = String(quote == null ? '' : quote);
+  var found = text.match(/-?\d[\d,]*(?:\.\d+)?/g);
+  if (!found) return false;
+  // Percentages and ratios are often quoted rounded ("margin of 14.5%" for
+  // 14.53), so allow a tolerance that scales with the figure's own magnitude.
+  var tolerance = Math.max(0.05, Math.abs(value) * 0.005);
+  for (var i = 0; i < found.length; i++) {
+    var n = parseFloat(found[i].replace(/,/g, ''));
+    if (isFinite(n) && Math.abs(n - value) <= tolerance) return true;
+  }
+  return false;
 }
 
 var QUOTE_MATCH_THRESHOLD = 0.85;
@@ -315,8 +375,11 @@ function verifyQuotes(rec, sourceText, opts) {
     }
 
     var score = quoteMatchScore(sourceText, quote);
-    var status = score >= threshold ? 'verified' : 'not_found';
-    if (status === 'not_found') failed++;
+    var status;
+    if (score < threshold) status = 'not_found';
+    else if (hasValue && !quoteContainsValue(quote, value)) status = 'value_not_in_quote';
+    else status = 'verified';
+    if (status !== 'verified') failed++;
     checks.push({ key: k, value: hasValue ? value : null, quote: quote, score: Math.round(score * 1000) / 1000, status: status });
   }
 
@@ -326,6 +389,8 @@ function verifyQuotes(rec, sourceText, opts) {
     checked: checks.length,
     verified: checks.filter(function (c) { return c.status === 'verified'; }).length,
     failed: failed,
+    not_found: checks.filter(function (c) { return c.status === 'not_found'; }).length,
+    value_not_in_quote: checks.filter(function (c) { return c.status === 'value_not_in_quote'; }).length,
     unquoted: unquoted,
     checks: checks
   };
@@ -362,8 +427,16 @@ function computeDeltas(records) {
     });
     for (var i = 1; i < rows.length; i++) {
       var prev = rows[i - 1], cur = rows[i];
-      var sameBasis = (prev.currency || {}).code === (cur.currency || {}).code &&
-                      (prev.currency || {}).unit === (cur.currency || {}).unit;
+      // Two records for the same company and quarter are the same filing reached
+      // two ways, not a quarter's movement — comparing them would invent a delta.
+      var kPrev = quarterSortKey(prev.quarter), kCur = quarterSortKey(cur.quarter);
+      if (kPrev != null && kCur != null && kPrev >= kCur) continue;
+      if (kPrev == null && kCur == null && String(prev.quarter) === String(cur.quarter)) continue;
+      // Compare the basis, not its spelling: an extraction that returns "Crores"
+      // where another returned "Crore" has not changed units.
+      var sameBasis =
+        String((prev.currency || {}).code || '').toUpperCase() === String((cur.currency || {}).code || '').toUpperCase() &&
+        unitKey((prev.currency || {}).unit) === unitKey((cur.currency || {}).unit);
       var metrics = {};
       for (var m = 0; m < CORE_KEYS.length; m++) {
         var k = CORE_KEYS[m];
@@ -489,7 +562,12 @@ var QA_SYSTEM = [
 // applied by the caller only when the question clearly scopes to one company.
 function buildQAPrompt(records, question, opts) {
   var o = opts || {};
-  var payload = (records || []).map(function (r) {
+  // A record a human looked at and rejected is a wrong record. It must not reach
+  // the model at all, let alone under a heading calling it reviewed.
+  var all = records || [];
+  var usable = all.filter(function (r) { return !(r.review && r.review.status === 'rejected'); });
+  var excluded = all.length - usable.length;
+  var payload = usable.map(function (r) {
     return {
       company: r.company,
       quarter: r.quarter,
@@ -502,13 +580,19 @@ function buildQAPrompt(records, question, opts) {
       outlook: r.outlook
     };
   });
+  var approved = payload.filter(function (r) { return r.review_status === 'approved'; }).length;
+  var header = 'Records available to answer from: ' + payload.length +
+    ' (' + approved + ' human-approved, ' + (payload.length - approved) + ' still pending review).' +
+    (excluded ? ' ' + excluded + ' rejected record(s) were withheld.' : '');
   var user = [
-    'Reviewed records (' + payload.length + ' record' + (payload.length === 1 ? '' : 's') + '):',
+    header,
+    'A record still pending review has not been checked by a person — say so when you rely on one.',
+    '',
     JSON.stringify(payload, null, o.pretty === false ? 0 : 1),
     '',
     'Question: ' + String(question == null ? '' : question)
   ].join('\n');
-  return { system: QA_SYSTEM, user: user, record_count: payload.length };
+  return { system: QA_SYSTEM, user: user, record_count: payload.length, excluded_rejected: excluded };
 }
 
 // Models occasionally wrap JSON in a fence or add a sentence around it despite
@@ -564,27 +648,35 @@ function buildWorkbookModel(records, opts) {
     return s;
   };
 
+  // A figure is only uniquely addressable once the quarter is part of its key —
+  // storage holds more than one quarter as soon as anyone backfills.
+  var refFor = function (r, key) {
+    return (r.company || 'Unknown') + '|' + (r.quarter || 'Unknown') + '|' + key;
+  };
+
   /* Core Financials: companies as rows, metrics as columns. */
-  var coreHeader = ['Company', 'Quarter', 'Currency', 'Unit'];
+  var coreHeader = ['Company', 'Quarter', 'Currency', 'Unit', 'Source'];
   CORE_METRICS.forEach(function (m) { coreHeader.push(m.label); });
   var coreAoa = [coreHeader];
+  var META_COLS = coreHeader.length - CORE_METRICS.length;
 
   rows.forEach(function (r, rowIdx) {
     var line = [
       r.company || DASH,
       r.quarter || DASH,
       (r.currency && r.currency.code) || DASH,
-      (r.currency && r.currency.unit) || DASH
+      (r.currency && r.currency.unit) || DASH,
+      r.source || DASH
     ];
     CORE_METRICS.forEach(function (m, mi) {
       var v = r.core ? r.core[m.key] : null;
       line.push(isNum(v) ? v : DASH);
       if (isNum(v)) {
-        var ref = (r.company || 'Unknown') + '|' + m.key;
+        var ref = refFor(r, m.key);
         var quote = (r.quotes && r.quotes[m.key]) || '';
         comments.push({
           sheet: 'Core Financials',
-          addr: colLetter(4 + mi) + (rowIdx + 2),
+          addr: colLetter(META_COLS + mi) + (rowIdx + 2),
           ref: ref,
           text: quote
             ? 'Source quote (' + ref + '): "' + quote + '"'
@@ -634,7 +726,7 @@ function buildWorkbookModel(records, opts) {
       var q = (r.quotes && r.quotes[m.key]) || '';
       if (!isNum(v) && !q) return;
       srcAoa.push([
-        (r.company || 'Unknown') + '|' + m.key,
+        refFor(r, m.key),
         r.company || DASH,
         r.quarter || DASH,
         m.label,
@@ -651,7 +743,7 @@ function buildWorkbookModel(records, opts) {
   return {
     generated_for: rows.length,
     sheets: [
-      { name: 'Core Financials', aoa: coreAoa, widths: [22, 12, 10, 10].concat(CORE_METRICS.map(function () { return 16; })), freeze: 'E2' },
+      { name: 'Core Financials', aoa: coreAoa, widths: [22, 12, 10, 10, 26].concat(CORE_METRICS.map(function () { return 16; })), freeze: 'F2' },
       { name: 'Segments',        aoa: segAoa,  widths: [22, 12].concat(CHANNEL_KEYS.concat(PRODUCT_KEYS).map(function () { return 16; })), freeze: 'C2' },
       { name: 'Outlook',         aoa: outAoa,  widths: [22, 12, 70, 40, 40], freeze: 'C2', wrap: [2, 3, 4] },
       { name: 'Sources & Quotes', aoa: srcAoa, widths: [26, 22, 12, 22, 14, 10, 10, 80, 14, 40], freeze: 'B2', wrap: [7] }

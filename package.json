@@ -10,7 +10,7 @@
     "sync:core": "node scripts/sync-core.mjs",
     "check:core": "node scripts/sync-core.mjs --check",
     "serve:dashboard": "node scripts/serve.mjs",
-    "test": "node --test test/"
+    "test": "node --test \"test/*.test.mjs\""
   },
   "license": "MIT"
 }

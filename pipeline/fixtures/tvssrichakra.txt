@@ -1,0 +1,101 @@
+*** SYNTHETIC TEST DATA — fixture for offline pipeline runs. Not a real filing. ***
+
+TVS SRICHAKRA LIMITED
+(Tyres marketed under the TVS Eurogrip brand)
+CIN: L25111TN1982PLC009414
+Registered Office: TVS Building, 7-B West Veli Street, Madurai 625 001, Tamil Nadu
+
+UNAUDITED FINANCIAL RESULTS FOR THE QUARTER ENDED 30 JUNE 2025
+(Rs. in Crore, except per share data)
+
+Particulars                                                       Quarter ended 30.06.2025
+                                                                        (Unaudited)
+--------------------------------------------------------------------------------------------------
+Revenue from operations                                                     762.34
+Other income                                                                  6.22
+Total income                                                                768.56
+Cost of materials consumed                                                  443.68
+Purchases of stock-in-trade                                                  10.67
+Changes in inventories of finished goods and work-in-progress                (4.18)
+Employee benefits expense                                                    77.76
+Finance costs                                                                11.36
+Depreciation and amortisation expense                                        28.45
+Other expenses                                                              149.80
+Total expenses                                                              717.54
+Profit before tax                                                            51.02
+Current tax                                                                  14.55
+Deferred tax                                                                 (1.34)
+Total tax expense                                                            13.21
+Profit for the period                                                        37.81
+Other comprehensive income (net of tax)                                       0.88
+Total comprehensive income                                                   38.69
+Paid-up equity share capital (face value Rs. 10 per share)                    7.66
+Earnings per share (not annualised), basic and diluted (Rs.)                 49.37
+--------------------------------------------------------------------------------------------------
+
+Note 3
+EBITDA for the quarter ended 30 June 2025 was Rs. 84.61 Crore and the EBITDA margin was
+11.1% of revenue from operations. EBITDA is presented before other income, finance costs,
+depreciation and amortisation, and tax, and is not a measure prescribed under Ind AS.
+
+STATEMENT OF ASSETS AND LIABILITIES (EXTRACT) AS AT 30 JUNE 2025 — UNAUDITED
+(Rs. in Crore)
+--------------------------------------------------------------------------------------------------
+Total assets                                                              2,144.82
+Total equity                                                              1,088.36
+Total liabilities                                                         1,056.46
+Total borrowings                                                            486.22
+Current assets                                                              902.18
+    Inventories                                                             388.55
+    Cash and cash equivalents                                                96.44
+Current liabilities                                                         762.44
+--------------------------------------------------------------------------------------------------
+
+KEY RATIOS
+Debt-equity ratio                                                              0.45
+Current ratio                                                                  1.18
+Quick ratio                                                                    0.67
+Interest coverage ratio                                                        4.94
+
+CASH FLOW EXTRACT FOR THE QUARTER ENDED 30 JUNE 2025 — UNAUDITED (Rs. in Crore)
+--------------------------------------------------------------------------------------------------
+Net cash generated from operating activities                                  74.28
+Capital expenditure                                                           52.10
+Free cash flow                                                                22.18
+--------------------------------------------------------------------------------------------------
+
+SEGMENT NOTE — QUARTER ENDED 30 JUNE 2025
+Revenue from operations by channel:
+    Replacement                                                                58%
+    Original equipment                                                         33%
+    Exports                                                                     9%
+
+Revenue from operations by product category:
+    Two-wheeler (2W), including scooter and motorcycle radials                  84%
+    Off-highway tyres (OHT), primarily farm and industrial                       9%
+    Passenger car radial (PCR)                                                   4%
+    Others, including tubes                                                      3%
+
+The Company does not manufacture truck and bus radial or truck and bus bias tyres, and no
+revenue is reported against those categories.
+
+MANAGEMENT COMMENTARY
+Two-wheeler original equipment demand was healthy through the quarter on the back of a
+strong scooter build schedule, while the replacement channel grew in line with the market.
+Premium radial tyres continued to increase as a share of the two-wheeler mix, supporting
+realisations. On costs, natural rubber prices remained elevated for the third consecutive
+quarter and crude-derivative inputs, particularly synthetic rubber and carbon black, were
+higher sequentially; together these held the EBITDA margin close to the March quarter level
+despite operating leverage from higher volume.
+
+Capital expenditure for the quarter was Rs. 52.10 Crore, largely towards the two-wheeler
+radial capacity addition at Madurai and towards the new mixing line. The Company expects
+FY26 capital expenditure of approximately Rs. 220 Crore, funded from internal accruals and
+existing working-capital facilities.
+
+The unaudited financial results were reviewed by the Audit Committee and approved by the
+Board of Directors at its meeting held on 11 August 2025.
+
+For TVS Srichakra Limited
+Managing Director
+Madurai, 11 August 2025
