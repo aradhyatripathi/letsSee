@@ -9,10 +9,14 @@
 // India are the spec's own suggestions. The last two are this file's inference
 // from the listed Indian tyre universe and are marked `confirmed: false` — they
 // are the ones to check against the original scoping note before a real run.
-// Changing the roster means editing this list and nothing else.
+// Changing the roster means editing this list and nothing else — nothing in the
+// pipeline, the dashboard or the tests assumes a count. Add or remove entries
+// freely; the only follow-up is a fixture per new company id
+// (pipeline/fixtures/<id>.txt) so offline runs keep covering it, which the test
+// suite will tell you about by name if you forget.
 //
 // `sources` is ordered: the pipeline tries each in turn and records which one
-// worked, so a company whose IR page is awkward does not block the other eight.
+// worked, so a company whose IR page is awkward does not block the rest.
 
 export const QUARTER_DEFAULT = 'Q1 FY26';
 
@@ -132,7 +136,7 @@ export function findCompany(needle) {
   ) || null;
 }
 
-/** Companies to run: an explicit selection, or all nine. */
+/** Companies to run: an explicit selection, or the whole roster. */
 export function selectCompanies(ids) {
   if (!ids || !ids.length) return COMPANIES.slice();
   return ids.map((id) => {

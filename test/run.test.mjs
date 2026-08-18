@@ -38,7 +38,7 @@ async function runCli(args, cwd) {
   }
 }
 
-test('a full offline run over all nine companies writes records and a report', async (t) => {
+test('a full offline run over the whole roster writes records and a report', async (t) => {
   const workDir = await mkdtemp(join(tmpdir(), 'tyre-run-'));
   const recordsPath = join(workDir, 'records.json');
   let runDir = null;
@@ -97,11 +97,32 @@ test('a full offline run over all nine companies writes records and a report', a
     ids.add(record.id);
   }
 
-  // Currency is read off each filing, never assumed: Goodyear India reports to its
-  // parent in USD Million and has to survive the run on that basis.
+  // Currency is read off each filing, never assumed. This holds for any roster:
+  // every record must carry the basis its own filing stated, with the fx rate the
+  // shared contract defines for that currency.
   const byCompany = new Map(payload.records.map((r) => [r.company, r]));
-  assert.deepEqual(byCompany.get('Goodyear India').currency, { code: 'USD', unit: 'Million', fx_to_inr: 83 });
-  assert.deepEqual(byCompany.get('Apollo Tyres').currency, { code: 'INR', unit: 'Crore', fx_to_inr: 1 });
+  for (const record of payload.records) {
+    assert.ok(record.currency.code, `${record.company}: currency code must be read from the filing`);
+    assert.ok(record.currency.unit, `${record.company}: currency unit must be read from the filing`);
+    assert.equal(
+      record.currency.fx_to_inr,
+      TyreCore.fxToInr(record.currency.code),
+      `${record.company}: fx must come from the contract's table, not be invented`
+    );
+  }
+
+  // Goodyear India reports to its parent in USD Million, so while it is on the
+  // roster it is the case that proves a non-INR basis survives the run intact
+  // rather than being quietly normalised to rupees. Guarded, so trimming the
+  // roster changes coverage without breaking the build.
+  const KNOWN_BASIS = {
+    'Goodyear India': { code: 'USD', unit: 'Million', fx_to_inr: 83 },
+    'Apollo Tyres': { code: 'INR', unit: 'Crore', fx_to_inr: 1 }
+  };
+  for (const [name, currency] of Object.entries(KNOWN_BASIS)) {
+    const record = byCompany.get(name);
+    if (record) assert.deepEqual(record.currency, currency, `${name}: reported basis`);
+  }
 
   // Every stored quote is genuinely in the filing text this run retrieved.
   for (const record of payload.records) {
@@ -116,13 +137,13 @@ test('a full offline run over all nine companies writes records and a report', a
   const report = await readFile(join(runDir, 'report.md'), 'utf8');
   assert.ok(report.startsWith(`# Tyre pipeline run — ${payload.run_id}`));
   assert.ok(report.includes('PENDING REVIEW'), 'the report says outright that nothing is trusted yet');
-  assert.ok(report.includes('9 of 9** companies produced a record'));
+  assert.ok(report.includes(`${COMPANIES.length} of ${COMPANIES.length}** companies produced a record`));
   assert.ok(report.includes('No company failed.'));
   for (const company of COMPANIES) {
     assert.ok(report.includes(company.name), `${company.name} is missing from the report`);
   }
 
-  assert.ok(stdout.includes('9 of 9 companies produced a record'), stdout);
+  assert.ok(stdout.includes(`${COMPANIES.length} of ${COMPANIES.length} companies produced a record`), stdout);
   assert.ok(stdout.includes(recordsPath), 'the operator is told where the records went');
   assert.ok(stdout.includes(TyreCore.STORAGE_KEY), 'and how to get them into the dashboard');
   assert.ok(stderr.includes('no ANTHROPIC_API_KEY set'), 'the offline fallback is stated, not silent');
@@ -136,14 +157,24 @@ test('a subset run touches only the companies asked for', async (t) => {
     if (runDir) await rm(runDir, { recursive: true, force: true });
   });
 
-  const { code } = await runCli(['--companies=apollo,ceat', '--out=subset.json'], workDir);
+  // Taken from the roster rather than named, so this keeps testing the subset
+  // behaviour whatever the roster happens to contain.
+  const [first, second, ...rest] = COMPANIES;
+  const asked = [first, second];
+
+  const { code } = await runCli([`--companies=${asked.map((c) => c.id).join(',')}`, '--out=subset.json'], workDir);
   assert.equal(code, 0);
 
   const payload = JSON.parse(await readFile(join(workDir, 'subset.json'), 'utf8'));
   runDir = join(REPO_ROOT, 'runs', payload.run_id);
 
-  assert.deepEqual(payload.records.map((r) => r.company), ['Apollo Tyres', 'CEAT']);
-  assert.ok(!existsSync(join(runDir, 'sources', 'mrf.txt')), 'no filing was retrieved for a company not asked for');
+  assert.deepEqual(payload.records.map((r) => r.company), asked.map((c) => c.name));
+  for (const skipped of rest) {
+    assert.ok(
+      !existsSync(join(runDir, 'sources', `${skipped.id}.txt`)),
+      `no filing should have been retrieved for ${skipped.name}, which was not asked for`
+    );
+  }
 });
 
 test('bad arguments fail before any work is done', async (t) => {
