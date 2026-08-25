@@ -141,6 +141,35 @@ function recordId(company, quarter, source) {
   return slug + '_' + q + '_' + h.toString(36);
 }
 
+/* ------------------------------------------------------------ review state -- */
+
+// One place decides what a record's review state is.
+//
+// Every output used to compare `r.review.status === 'rejected'` at its own call site,
+// which meant a status of 'Rejected' or ' rejected ' — trivially present in a file
+// written by anything other than this dashboard — sailed past every one of those filters
+// and put a record a person had thrown out into the workbook, the deck and the model's
+// context. The comparison is normalised here instead, once, and everything asks this.
+//
+// Anything unrecognisable is 'pending': never approved, so it cannot reach an
+// approved-only export, and never silently treated as a rejection either.
+function reviewStatus(record) {
+  if (!record || typeof record !== 'object') return 'pending';
+  var raw = record.review && record.review.status;
+  var s = String(raw == null ? '' : raw).trim().toLowerCase();
+  return s === 'approved' || s === 'rejected' ? s : 'pending';
+}
+
+function isApproved(record) { return reviewStatus(record) === 'approved'; }
+function isRejected(record) { return reviewStatus(record) === 'rejected'; }
+
+// A records array can arrive from a file. Anything that is not an object cannot be
+// filtered, formatted or verified, and dropping it here beats a TypeError three frames
+// down inside a workbook renderer.
+function usableRecords(records) {
+  return (records || []).filter(function (r) { return r && typeof r === 'object'; });
+}
+
 /* -------------------------------------------------------- stored transform -- */
 
 // Extraction output -> stored shape. Field-for-field, no invention: anything the
@@ -605,8 +634,8 @@ function buildQAPrompt(records, question, opts) {
   var o = opts || {};
   // A record a human looked at and rejected is a wrong record. It must not reach
   // the model at all, let alone under a heading calling it reviewed.
-  var all = records || [];
-  var usable = all.filter(function (r) { return !(r.review && r.review.status === 'rejected'); });
+  var all = usableRecords(records);
+  var usable = all.filter(function (r) { return !isRejected(r); });
   var excluded = all.length - usable.length;
   var payload = usable.map(function (r) {
     return {
@@ -614,7 +643,7 @@ function buildQAPrompt(records, question, opts) {
       quarter: r.quarter,
       source: r.source,
       currency: r.currency,
-      review_status: r.review && r.review.status,
+      review_status: reviewStatus(r),
       core: r.core,
       quotes: r.quotes,
       segments: r.segments,
@@ -677,11 +706,9 @@ function buildWorkbookModel(records, opts) {
   // A record a human rejected is a wrong record: it is withheld unconditionally,
   // not merely when the reviewedOnly toggle is on. reviewedOnly then narrows
   // further, to records a person has positively approved.
-  var rows = (records || []).filter(function (r) {
-    return !(r.review && r.review.status === 'rejected');
-  });
+  var rows = usableRecords(records).filter(function (r) { return !isRejected(r); });
   if (o.reviewedOnly) {
-    rows = rows.filter(function (r) { return r.review && r.review.status === 'approved'; });
+    rows = rows.filter(isApproved);
   }
   rows.sort(function (a, b) { return String(a.company || '').localeCompare(String(b.company || '')); });
 
@@ -829,11 +856,11 @@ var DECK_SECTIONS = [
  */
 function buildDeckModel(records, opts) {
   var o = opts || {};
-  var all = records || [];
-  var rejected = all.filter(function (r) { return r.review && r.review.status === 'rejected'; });
-  var rows = all.filter(function (r) { return !(r.review && r.review.status === 'rejected'); });
+  var all = usableRecords(records);
+  var rejected = all.filter(isRejected);
+  var rows = all.filter(function (r) { return !isRejected(r); });
   if (o.reviewedOnly) {
-    rows = rows.filter(function (r) { return r.review && r.review.status === 'approved'; });
+    rows = rows.filter(isApproved);
   }
   rows.sort(function (a, b) { return String(a.company || '').localeCompare(String(b.company || '')); });
 
@@ -850,17 +877,25 @@ function buildDeckModel(records, opts) {
   var quarters = uniqueStrings(history.map(function (r) { return r.quarter; }))
     .sort(function (a, b) { return (quarterSortKey(a) || 0) - (quarterSortKey(b) || 0); });
   var quarter = o.quarter || quarters[quarters.length - 1] || 'no quarter';
+  // A record with no quarter cannot join a quarter's comparison, but it must not simply
+  // disappear either — it is counted and named on the provenance slide instead.
+  var undated = history.filter(function (r) { return !String(r.quarter || '').trim(); });
   if (quarters.length) {
     rows = history.filter(function (r) { return String(r.quarter || '') === quarter; });
   }
 
+  // A record with no currency is its own case, not a silent member of whatever the others
+  // reported. Folding it in let the deck state "figures in INR Crore" over a figure whose
+  // unit nobody knows.
   var currencies = uniqueStrings(rows.map(function (r) {
-    return r.currency ? [r.currency.code, r.currency.unit].filter(Boolean).join(' ') : '';
+    return currencyLabelOf(r) || 'currency not stated';
   }));
-  var oneCurrency = currencies.length === 1 ? currencies[0] : null;
+  var oneCurrency = currencies.length === 1 && currencies[0] !== 'currency not stated'
+    ? currencies[0]
+    : null;
 
-  var approved = rows.filter(function (r) { return r.review && r.review.status === 'approved'; });
-  var pending = rows.filter(function (r) { return !r.review || r.review.status === 'pending' || !r.review.status; });
+  var approved = rows.filter(isApproved);
+  var pending = rows.filter(function (r) { return reviewStatus(r) === 'pending'; });
   var reviewers = uniqueStrings(approved.map(function (r) { return r.review && r.review.reviewer; }));
 
   var tally = { verified: 0, not_found: 0, value_not_in_quote: 0, unquoted: 0, checked: 0 };
@@ -876,10 +911,16 @@ function buildDeckModel(records, opts) {
     });
   });
 
+  // The counts are scoped explicitly, because they used to mix scopes: `total` counted the
+  // focus quarter while `rejected_withheld` counted the whole input, so they did not add
+  // up and a reader could not tell why.
   var provenance = {
+    input_records: all.length,
     total: rows.length,
     quarter: quarter,
     archived_quarters: quarters,
+    other_quarters_held_back: history.length - rows.length - undated.length,
+    undated_withheld: undated.length,
     approved: approved.length,
     pending: pending.length,
     rejected_withheld: rejected.length,
@@ -927,8 +968,9 @@ function buildDeckModel(records, opts) {
       oneCurrency
         ? 'All figures are in ' + oneCurrency + ', as reported. Nothing has been converted or rescaled.'
         : 'Figures are in each company’s own reporting currency, shown per row. They are NOT converted, so the columns are not directly comparable.',
-      'Blank cells (' + DASH + ') mean the filing did not state that figure. They are not zeros.'
-    ],
+      'Blank cells (' + DASH + ') mean the filing did not state that figure. They are not zeros.',
+      heldBackNote(provenance, quarter, DASH)
+    ].filter(Boolean),
     footnote: 'Quote coverage: ' + tally.verified + ' verified, ' + tally.unquoted + ' reported without a quote, across ' + tally.checked + ' checks.'
   });
 
@@ -1009,12 +1051,19 @@ function buildDeckModel(records, opts) {
         });
         return line;
       });
+      // The claim has to be computed, not assumed: with reviewedOnly off, history holds
+      // unreviewed records from earlier quarters too, and a slide asserting that every
+      // figure on it was approved would be stating something false.
+      var unreviewedInHistory = history.filter(function (r) { return !isApproved(r); }).length;
       pushTableSlides(slides, {
         title: trend.title,
-        subtitle: quarters.length + ' quarters of approved records · as reported, never converted',
+        subtitle: quarters.length + ' quarters · as reported, never converted',
         columns: ['Company'].concat(quarters),
         rows: body,
-        footnote: 'Every figure here was approved by a person before it was archived. A blank means that quarter is not in the archive for that company.'
+        footnote: (unreviewedInHistory
+          ? unreviewedInHistory + ' of these ' + history.length + ' records have not been reviewed by a person.'
+          : 'Every figure here was approved by a person.') +
+          ' A blank means that quarter is not present for that company.'
       });
     });
   }
@@ -1037,8 +1086,8 @@ function buildDeckModel(records, opts) {
 
   rows.forEach(function (r) {
     var v = r.verification || {};
-    var status = r.review && r.review.status === 'approved'
-      ? 'Approved' + (r.review.reviewer ? ' by ' + r.review.reviewer : '')
+    var status = isApproved(r)
+      ? 'Approved' + (r.review && r.review.reviewer ? ' by ' + r.review.reviewer : '')
       : 'PENDING REVIEW — not yet checked by a person';
     var pairs = CORE_METRICS.filter(function (m) { return isNum(r.core && r.core[m.key]); })
       .map(function (m) { return [m.label, formatMetric(r.core[m.key], m, r.currency)]; });
@@ -1093,6 +1142,11 @@ function buildDeckModel(records, opts) {
 var MAX_TABLE_ROWS = 12;
 var MAX_BULLETS = 8;
 
+// The footnote repeats on every continuation slide rather than appearing once at the end.
+// It carries the caveats — that the columns are in different currencies and are not a
+// ranking, that a starred company has not been reviewed — and a caveat that appears only
+// on the last of three slides is worse than none: the reader looking at slide one sees a
+// clean table and no warning at all.
 function pushTableSlides(slides, spec) {
   var chunks = chunk(spec.rows, MAX_TABLE_ROWS);
   if (!chunks.length) chunks = [[]];
@@ -1102,8 +1156,9 @@ function pushTableSlides(slides, spec) {
       title: i === 0 ? spec.title : spec.title + ' (cont.)',
       subtitle: spec.subtitle || null,
       columns: spec.columns,
+      align: spec.align || null,
       rows: part,
-      footnote: i === chunks.length - 1 ? (spec.footnote || null) : null
+      footnote: footnoteFor(spec.footnote, chunks.length, i)
     });
   });
 }
@@ -1117,9 +1172,16 @@ function pushBulletSlides(slides, spec) {
       title: i === 0 ? spec.title : spec.title + ' (cont.)',
       subtitle: spec.subtitle || null,
       bullets: part,
-      footnote: i === chunks.length - 1 ? (spec.footnote || null) : null
+      footnote: footnoteFor(spec.footnote, chunks.length, i)
     });
   });
+}
+
+function footnoteFor(footnote, total, index) {
+  var parts = [];
+  if (footnote) parts.push(footnote);
+  if (total > 1) parts.push('Slide ' + (index + 1) + ' of ' + total + ' for this table.');
+  return parts.length ? parts.join(' ') : null;
 }
 
 function chunk(list, size) {
@@ -1140,17 +1202,32 @@ function pairTwoUp(pairs, dash) {
   return out;
 }
 
+// Anything the deck declined to show is said out loud on the slide that explains the
+// deck, rather than being silently absent.
+function heldBackNote(p, quarter, dash) {
+  var parts = [];
+  if (p.other_quarters_held_back) {
+    parts.push(p.other_quarters_held_back + ' record' + (p.other_quarters_held_back === 1 ? '' : 's') +
+      ' from other quarters are not on the comparison slides — those compare ' + quarter + ' only.');
+  }
+  if (p.undated_withheld) {
+    parts.push(p.undated_withheld + ' record' + (p.undated_withheld === 1 ? '' : 's') +
+      ' state no quarter and could not be placed, so ' + (p.undated_withheld === 1 ? 'it is' : 'they are') +
+      ' not shown anywhere in this deck.');
+  }
+  return parts.length ? parts.join(' ') : null;
+}
+
 function companyLabel(r) {
   var name = r.company || 'Unknown';
-  var pending = !r.review || r.review.status !== 'approved';
-  return pending ? name + ' *' : name;
+  return isApproved(r) ? name : name + ' *';
 }
 
 // The asterisk is the only thing separating a reviewed figure from an unreviewed
 // one on a slide someone will read out of context, so it says what it means on
 // every slide that uses it rather than only in the preamble.
 function pendingNote(rows) {
-  var n = rows.filter(function (r) { return !r.review || r.review.status !== 'approved'; }).length;
+  var n = rows.filter(function (r) { return !isApproved(r); }).length;
   return n ? '* not yet reviewed by a person — treat as draft.' : null;
 }
 
@@ -1178,8 +1255,13 @@ function titleCase(s) {
 
 function clipText(value, max) {
   var s = String(value == null ? '' : value).replace(/\s+/g, ' ').trim();
-  if (!s) return '';
-  return s.length > max ? s.slice(0, max - 1) + '…' : s;
+  if (!s || s.length <= max) return s;
+  // Back off one unit when the cut would land between the halves of an astral
+  // character, which would otherwise leave a lone surrogate in the text.
+  var cut = max - 1;
+  var last = s.charCodeAt(cut - 1);
+  if (last >= 0xd800 && last <= 0xdbff) cut -= 1;
+  return s.slice(0, cut) + '…';
 }
 
 var TyreCore = {
@@ -1197,6 +1279,9 @@ var TyreCore = {
   STORAGE_KEY: 'tyre-records-v2',
 
   isNum: isNum,
+  reviewStatus: reviewStatus,
+  isApproved: isApproved,
+  isRejected: isRejected,
   fxToInr: fxToInr,
   toInrCrore: toInrCrore,
   formatMetric: formatMetric,

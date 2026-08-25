@@ -21,7 +21,7 @@
 //   node pipeline/archive.mjs --export=all-quarters.json         read it back out
 //   node pipeline/archive.mjs --list                             what is in it
 
-import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -30,6 +30,34 @@ import { TyreCore } from './lib/core.mjs';
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const DEFAULT_DIR = join(REPO_ROOT, 'archive');
+
+// A quote is a short span of a filing, and it belongs here — it is what makes a figure
+// auditable. A filing is not, and boundary 2 turns on that difference. Nothing enforced
+// it before: a whole document is trivially an exact substring of itself, so a record
+// carrying one as its "quote" verified at a perfect score and archived cleanly.
+const MAX_STRING_CHARS = 2000;
+const MAX_RECORD_CHARS = 200000;
+
+/** Short stable hash, for telling apart names that slug to the same thing. */
+function shortHash(value) {
+  var h = 5381;
+  const s = String(value == null ? '' : value);
+  for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) >>> 0;
+  return h.toString(36).slice(0, 6);
+}
+
+/** The longest string anywhere in a record, and where it was. */
+function longestString(record) {
+  let worst = { len: 0, path: null };
+  (function walk(node, path) {
+    if (typeof node === 'string') {
+      if (node.length > worst.len) worst = { len: node.length, path: path || '(root)' };
+    } else if (node && typeof node === 'object') {
+      for (const [k, v] of Object.entries(node)) walk(v, path ? `${path}.${k}` : k);
+    }
+  })(record, '');
+  return worst;
+}
 
 const USAGE = `
 The cross-quarter archive of reviewed records.
@@ -49,7 +77,8 @@ Options
                      changed record is reported and left alone.
   --help             This text.
 
-Only records a person approved are archived. That is the line Section 0 draws:
+Only records a person approved are archived, and a record that has since been
+rejected is taken back out. Nothing longer than a quote is accepted at all. That is the line Section 0 draws:
 reviewed output may be kept, scraped filings may not. Retrieved text lives in
 runs/, is gitignored, and never reaches this directory.
 `.trim();
@@ -88,30 +117,73 @@ export function slug(value, fallback) {
 
 /** Where one record lives: archive/<quarter>/<company>.json */
 export function recordPath(dir, record) {
-  return join(dir, slug(record.quarter, 'unknown-quarter'), `${slug(record.company, 'unknown-company')}.json`);
+  // A name with no ASCII alphanumerics — every Devanagari name, for instance — slugs to
+  // the same fallback, and two of them would then be the same file. Names in that case
+  // carry a hash of the original so they stay distinct and stay stable.
+  const base = slug(record.company, '');
+  const name = base || `company-${shortHash(record.company)}`;
+  return join(dir, slug(record.quarter, 'unknown-quarter'), `${name}.json`);
 }
 
-/** Every record in the archive, sorted oldest quarter first then by company. */
+/**
+ * Everything in the archive, oldest quarter first then by company.
+ *
+ * Reading re-checks what writing checked. The archive is a directory on disk that
+ * anything can write to, and --list and --export used to print "every record was approved
+ * before it was archived" over whatever files happened to be there — pointed at the wrong
+ * directory it would vouch for records nobody had ever reviewed. A file that is not an
+ * approved, well-formed record is reported as a problem rather than returned as a record.
+ *
+ * @returns {Promise<{records: Array, problems: Array<{path:string, reason:string}>}>}
+ */
 export async function readArchive(dir) {
-  if (!existsSync(dir)) return [];
-  const out = [];
+  const records = [];
+  const problems = [];
+  if (!existsSync(dir)) return { records, problems };
+
   for (const quarter of (await readdir(dir, { withFileTypes: true })).filter((e) => e.isDirectory())) {
     const quarterDir = join(dir, quarter.name);
-    for (const file of await readdir(quarterDir)) {
-      if (!file.endsWith('.json')) continue;
+    for (const entry of await readdir(quarterDir, { withFileTypes: true })) {
+      if (!entry.isFile() || !entry.name.endsWith('.json')) continue;
+      const path = join(quarterDir, entry.name);
+      let parsed;
       try {
-        out.push(JSON.parse(await readFile(join(quarterDir, file), 'utf8')));
+        parsed = JSON.parse(await readFile(path, 'utf8'));
       } catch (err) {
-        throw new Error(`${join(quarterDir, file)} is not readable JSON — ${err.message}`);
+        problems.push({ path, reason: `not readable JSON — ${err.message}` });
+        continue;
       }
+      const reason = archiveRejectionReason(parsed);
+      if (reason) problems.push({ path, reason });
+      else records.push(parsed);
     }
   }
-  out.sort((a, b) => {
+
+  records.sort((a, b) => {
     const ka = TyreCore.quarterSortKey(a.quarter) ?? 0;
     const kb = TyreCore.quarterSortKey(b.quarter) ?? 0;
     return ka - kb || String(a.company || '').localeCompare(String(b.company || ''));
   });
-  return out;
+  return { records, problems };
+}
+
+/** Why a record may not be archived, or null when it may. One rule, used both ways. */
+export function archiveRejectionReason(record) {
+  if (!record || typeof record !== 'object' || Array.isArray(record)) return 'not a record object';
+  const status = TyreCore.reviewStatus(record);
+  if (status !== 'approved') return status;
+  const problems = TyreCore.validateStored(record);
+  if (problems.length) return `malformed: ${problems.join('; ')}`;
+
+  const worst = longestString(record);
+  if (worst.len > MAX_STRING_CHARS) {
+    return `${worst.path} holds ${worst.len.toLocaleString('en-US')} characters — that is a document, not a quote (limit ${MAX_STRING_CHARS})`;
+  }
+  const size = JSON.stringify(record).length;
+  if (size > MAX_RECORD_CHARS) {
+    return `the record serialises to ${size.toLocaleString('en-US')} characters (limit ${MAX_RECORD_CHARS})`;
+  }
+  return null;
 }
 
 /** Comparable content, ignoring which run produced it and when. */
@@ -123,39 +195,78 @@ function contentOf(record) {
 }
 
 /**
- * Add approved records to the archive.
- * @returns {Promise<{added:Array, unchanged:Array, changed:Array, skipped:Array}>}
+ * Add approved records to the archive, and take out records that are no longer approved.
+ *
+ * @returns {Promise<{added:Array, unchanged:Array, changed:Array, removed:Array,
+ *                    skipped:Array, failed:Array, collisions:Array}>}
  */
 export async function addToArchive(records, dir, { force = false } = {}) {
-  const result = { added: [], unchanged: [], changed: [], skipped: [] };
+  const result = { added: [], unchanged: [], changed: [], removed: [], skipped: [], failed: [], collisions: [] };
 
-  for (const record of records) {
-    const status = (record.review && record.review.status) || 'pending';
-    if (status !== 'approved') {
-      result.skipped.push({ record, reason: status });
-      continue;
-    }
-    const problems = TyreCore.validateStored(record);
-    if (problems.length) {
-      result.skipped.push({ record, reason: `malformed: ${problems.join('; ')}` });
+  for (const record of records || []) {
+    if (!record || typeof record !== 'object') {
+      result.skipped.push({ record, reason: 'not a record object' });
       continue;
     }
 
-    const path = recordPath(dir, record);
-    if (existsSync(path)) {
-      const existing = JSON.parse(await readFile(path, 'utf8'));
-      if (contentOf(existing) === contentOf(record)) {
-        result.unchanged.push({ record, path });
-        continue;
-      }
-      if (!force) {
-        result.changed.push({ record, path });
-        continue;
-      }
+    let path;
+    try {
+      path = recordPath(dir, record);
+    } catch (err) {
+      result.failed.push({ record, path: null, error: err.message });
+      continue;
     }
-    await mkdir(dirname(path), { recursive: true });
-    await writeFile(path, `${JSON.stringify(record, null, 2)}\n`, 'utf8');
-    result.added.push({ record, path });
+
+    // A record approved and archived, then rejected on re-review, used to stay in the
+    // archive and keep being exported while the run printed a line implying the
+    // rejection had taken effect. A rejection now takes the archived copy out, which is
+    // the only reading of "reviewed output" that survives someone changing their mind.
+    if (TyreCore.isRejected(record)) {
+      if (existsSync(path)) {
+        try {
+          await rm(path);
+          result.removed.push({ record, path });
+        } catch (err) {
+          result.failed.push({ record, path, error: err.message });
+        }
+      } else {
+        result.skipped.push({ record, reason: 'rejected' });
+      }
+      continue;
+    }
+
+    const reason = archiveRejectionReason(record);
+    if (reason) {
+      result.skipped.push({ record, reason });
+      continue;
+    }
+
+    try {
+      if (existsSync(path)) {
+        const existing = JSON.parse(await readFile(path, 'utf8'));
+        // Two different companies resolving to one filename must never end with one
+        // silently overwriting the other, --force or not.
+        if (String(existing.company || '') !== String(record.company || '')) {
+          result.collisions.push({ record, path, occupant: existing.company || '(unnamed)' });
+          continue;
+        }
+        if (contentOf(existing) === contentOf(record)) {
+          result.unchanged.push({ record, path });
+          continue;
+        }
+        if (!force) {
+          result.changed.push({ record, path });
+          continue;
+        }
+      }
+      await mkdir(dirname(path), { recursive: true });
+      await writeFile(path, `${JSON.stringify(record, null, 2)}\n`, 'utf8');
+      result.added.push({ record, path });
+    } catch (err) {
+      // One unwritable filename used to abort the loop, so approved records after it were
+      // never archived and no summary was printed at all.
+      result.failed.push({ record, path, error: err.message });
+    }
   }
   return result;
 }
@@ -187,9 +298,19 @@ async function main(argv) {
 
   const dir = flags.dir ? resolve(process.cwd(), flags.dir) : DEFAULT_DIR;
 
+  // --records with --list or --export used to be silently discarded, and the --list form
+  // exited 0, so an operator could believe a record had been archived when nothing had.
+  if (flags.records && (flags.list || flags.export)) {
+    process.stderr.write(
+      '--records adds to the archive; --list and --export read it. Run them as two commands ' +
+      'so it is clear which one happened.\n'
+    );
+    return 1;
+  }
+
   if (flags.list || (!flags.records && !flags.export)) {
-    const archived = await readArchive(dir);
-    if (!archived.length) {
+    const { records: archived, problems } = await readArchive(dir);
+    if (!archived.length && !problems.length) {
       process.stdout.write(`The archive at ${dir} is empty.\n\nAdd to it with:\n  node pipeline/archive.mjs --records=<path>\n`);
       return 0;
     }
@@ -197,14 +318,26 @@ async function main(argv) {
     for (const [quarter, companies] of summarizeQuarters(archived)) {
       process.stdout.write(`  ${quarter}: ${companies.sort().join(', ')}\n`);
     }
-    return 0;
+    if (problems.length) {
+      process.stdout.write(`\n  ${problems.length} file${problems.length === 1 ? '' : 's'} in this directory ${problems.length === 1 ? 'is' : 'are'} not an approved record and ${problems.length === 1 ? 'was' : 'were'} not counted:\n`);
+      for (const p of problems) {
+        process.stdout.write(`    ! ${p.path.replace(`${REPO_ROOT}/`, '')} — ${p.reason}\n`);
+      }
+    }
+    return problems.length && !archived.length ? 1 : 0;
   }
 
   if (flags.export) {
-    const archived = await readArchive(dir);
+    const { records: archived, problems } = await readArchive(dir);
     if (!archived.length) {
-      process.stderr.write(`The archive at ${dir} is empty — nothing to export.\n`);
+      process.stderr.write(
+        `The archive at ${dir} holds no approved records — nothing to export.\n` +
+        (problems.length ? `  ${problems.length} file(s) there are not approved records; run --list to see why.\n` : '')
+      );
       return 1;
+    }
+    if (problems.length) {
+      process.stderr.write(`Note: ${problems.length} file(s) in ${dir} were skipped because they are not approved records. Run --list for the detail.\n`);
     }
     const out = resolve(process.cwd(), flags.export);
     await mkdir(dirname(out), { recursive: true });
@@ -216,7 +349,7 @@ async function main(argv) {
     }, null, 2)}\n`, 'utf8');
     process.stdout.write(
       `${out}\n  ${archived.length} record${archived.length === 1 ? '' : 's'} across ${summarizeQuarters(archived).length} quarter(s)\n` +
-      '  Import it in the dashboard to compare quarters. Every record was approved before it was archived.\n'
+      '  Every record in this file was checked on the way out: approved, well-formed, and no field long enough to be a document.\n'
     );
     return 0;
   }
@@ -235,9 +368,28 @@ async function main(argv) {
   const result = await addToArchive(records, dir, { force: flags.force === true });
 
   const lines = [dir];
-  lines.push(`  ${result.added.length} written, ${result.unchanged.length} already archived unchanged`);
+  lines.push(`  ${result.added.length} written, ${result.unchanged.length} already archived unchanged` +
+    (result.removed.length ? `, ${result.removed.length} removed` : ''));
   for (const { record, path } of result.added) {
     lines.push(`    + ${record.company} ${record.quarter} -> ${path.replace(`${REPO_ROOT}/`, '')}`);
+  }
+  for (const { record, path } of result.removed) {
+    lines.push(`    - ${record.company} ${record.quarter} — rejected on re-review, taken out of ${path.replace(`${REPO_ROOT}/`, '')}`);
+  }
+  if (result.collisions.length) {
+    lines.push('');
+    lines.push(`  ${result.collisions.length} name collision${result.collisions.length === 1 ? '' : 's'} — nothing was overwritten:`);
+    for (const { record, path, occupant } of result.collisions) {
+      lines.push(`    ! ${record.company} would land on ${path.replace(`${REPO_ROOT}/`, '')}, which holds ${occupant}`);
+    }
+    lines.push('    Give one of them a distinguishable name in pipeline/config/companies.mjs.');
+  }
+  if (result.failed.length) {
+    lines.push('');
+    lines.push(`  ${result.failed.length} could not be written:`);
+    for (const { record, error } of result.failed) {
+      lines.push(`    x ${(record && record.company) || 'unknown'} — ${error}`);
+    }
   }
   if (result.changed.length) {
     lines.push('');
@@ -261,7 +413,8 @@ async function main(argv) {
     lines.push('  Commit the archive to keep the history. Nothing here is written unattended.');
   }
   process.stdout.write(`${lines.join('\n')}\n`);
-  return result.added.length || result.unchanged.length ? 0 : 1;
+  if (result.failed.length || result.collisions.length) return 1;
+  return result.added.length || result.unchanged.length || result.removed.length ? 0 : 1;
 }
 
 const invokedDirectly = process.argv[1] && import.meta.url === `file://${process.argv[1]}`;

@@ -42,11 +42,18 @@ function tdUtf8(str) {
   var out = [];
   for (var i = 0; i < s.length; i++) {
     var c = s.charCodeAt(i);
+    var lo = i + 1 < s.length ? s.charCodeAt(i + 1) : -1;
     if (c < 0x80) out.push(c);
     else if (c < 0x800) out.push(0xc0 | (c >> 6), 0x80 | (c & 0x3f));
-    else if (c >= 0xd800 && c <= 0xdbff && i + 1 < s.length) {
-      var cp = 0x10000 + ((c - 0xd800) << 10) + (s.charCodeAt(++i) - 0xdc00);
+    else if (c >= 0xd800 && c <= 0xdbff && lo >= 0xdc00 && lo <= 0xdfff) {
+      // Only consume the next unit when it really is the low half of the pair —
+      // otherwise this ate an ordinary character, and eating the '<' of the next tag
+      // breaks the document rather than one word.
+      var cp = 0x10000 + ((c - 0xd800) << 10) + (lo - 0xdc00);
+      i++;
       out.push(0xf0 | (cp >> 18), 0x80 | ((cp >> 12) & 0x3f), 0x80 | ((cp >> 6) & 0x3f), 0x80 | (cp & 0x3f));
+    } else if (c >= 0xd800 && c <= 0xdfff) {
+      out.push(0xef, 0xbf, 0xbd);                 // unpaired surrogate -> U+FFFD
     } else out.push(0xe0 | (c >> 12), 0x80 | ((c >> 6) & 0x3f), 0x80 | (c & 0x3f));
   }
   return new Uint8Array(out);
@@ -58,6 +65,12 @@ var TD_DOS_TIME = 0;
 var TD_DOS_DATE = ((2020 - 1980) << 9) | (1 << 5) | 1;
 
 function tdZip(entries) {
+  // The end-of-central-directory record holds the entry count in 16 bits. ZIP64 would
+  // lift that; nothing here needs it, so refuse loudly rather than wrap silently and
+  // produce an archive that unzips to a fraction of its contents.
+  if (entries.length > 0xffff) {
+    throw new Error('too many parts for a plain ZIP (' + entries.length + ' > 65535); this deck needs ZIP64');
+  }
   var chunks = [];
   var central = [];
   var offset = 0;
@@ -105,14 +118,37 @@ function tdZip(entries) {
 
 /* -------------------------------------------------------------------- xml -- */
 
-// Control characters are not representable in XML 1.0, and a PDF text layer
-// hands them over more often than you would hope — an unescaped one makes the
-// whole package unopenable, which is a bad way to find out.
-var TD_CONTROL_CHARS = /[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g;
+// XML 1.0 admits a specific set of characters, and a PDF text layer hands over
+// things outside it more often than you would hope. Anything not in the Char
+// production is dropped before escaping, because the consequence is not a stray
+// glyph: a single U+FFFF in a company name makes ppt/slides/slideN.xml
+// not-well-formed, and the reader that notices does not report an error — it opens
+// the deck and silently drops every table row after the bad character.
+//
+// Done character by character rather than by regex because the surrogate rule is
+// contextual: a properly paired surrogate is a perfectly valid astral character and
+// must survive, while a lone half of a pair is not representable at all.
+function tdSanitize(value) {
+  var str = String(value == null ? '' : value);
+  var out = '';
+  for (var i = 0; i < str.length; i++) {
+    var c = str.charCodeAt(i);
+    if (c >= 0xd800 && c <= 0xdbff) {
+      var next = i + 1 < str.length ? str.charCodeAt(i + 1) : -1;
+      if (next >= 0xdc00 && next <= 0xdfff) { out += str.charAt(i) + str.charAt(i + 1); i++; }
+      continue;                                   // lone high surrogate
+    }
+    if (c >= 0xdc00 && c <= 0xdfff) continue;     // lone low surrogate
+    if (c === 0xfffe || c === 0xffff) continue;   // not characters
+    if (c === 0x7f) continue;
+    if (c < 0x20 && c !== 0x09 && c !== 0x0a && c !== 0x0d) continue;
+    out += str.charAt(i);
+  }
+  return out;
+}
 
 function tdEsc(value) {
-  return String(value == null ? '' : value)
-    .replace(TD_CONTROL_CHARS, '')
+  return tdSanitize(value)
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;').replace(/'/g, '&apos;');
 }
@@ -503,6 +539,7 @@ function recordsToPptx(records, opts) {
 
 var TyreDeck = {
   writePptx: writePptx,
+  sanitizeXmlText: tdSanitize,
   recordsToPptx: recordsToPptx,
   slideXml: tdSlideXml,
   zip: tdZip,

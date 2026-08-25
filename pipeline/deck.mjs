@@ -115,17 +115,26 @@ async function main(argv) {
   // An empty deck is the correct output for "nothing has been reviewed", but it is
   // a confusing file to be handed, so say what happened instead of writing it.
   if (!model.provenance.total) {
-    const rejected = records.filter((r) => r.review && r.review.status === 'rejected').length;
-    const pending = records.length - rejected;
-    process.stderr.write(
-      `No records qualify for the deck.\n` +
-      `  ${records.length} record${records.length === 1 ? '' : 's'} in ${recordsPath}\n` +
-      `  ${rejected} rejected in review (never included)\n` +
-      (reviewedOnly && pending
-        ? `  ${pending} not yet approved — review them in the dashboard, or pass --include-pending to build a draft deck.\n`
-        : '') +
-      'Nothing was written.\n'
-    );
+    const p = model.provenance;
+    const lines = [
+      'No records qualify for the deck.',
+      `  ${p.input_records} record${p.input_records === 1 ? '' : 's'} in ${recordsPath}`
+    ];
+    if (p.rejected_withheld) lines.push(`  ${p.rejected_withheld} rejected in review (never included)`);
+    if (p.other_quarters_held_back) {
+      lines.push(
+        `  ${p.other_quarters_held_back} in other quarters — this deck compares ${p.quarter}` +
+        (flags.quarter ? ` because --quarter asked for it` : '') +
+        `. Available: ${p.archived_quarters.join(', ') || 'none'}`
+      );
+    }
+    if (p.undated_withheld) lines.push(`  ${p.undated_withheld} state no quarter at all`);
+    const unapproved = p.input_records - p.rejected_withheld - p.other_quarters_held_back - p.undated_withheld;
+    if (reviewedOnly && unapproved > 0) {
+      lines.push(`  ${unapproved} not yet approved — review in the dashboard, or pass --include-pending for a draft deck`);
+    }
+    lines.push('Nothing was written.');
+    process.stderr.write(`${lines.join('\n')}\n`);
     return 1;
   }
 

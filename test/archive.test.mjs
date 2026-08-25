@@ -7,13 +7,13 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { TyreCore } from '../pipeline/lib/core.mjs';
-import { addToArchive, readArchive, recordPath, slug } from '../pipeline/archive.mjs';
+import { addToArchive, archiveRejectionReason, readArchive, recordPath, slug } from '../pipeline/archive.mjs';
 
 function record(over = {}) {
   const base = {
@@ -51,8 +51,8 @@ test('only approved records are archived', async (t) => {
   assert.equal(result.added.length, 2, 'the two approved records');
   assert.deepEqual(result.skipped.map((s) => s.reason).sort(), ['pending', 'rejected']);
 
-  const archived = await readArchive(dir);
-  assert.deepEqual(archived.map((r) => r.company).sort(), ['Apollo Tyres', 'JK Tyre']);
+  const { records } = await readArchive(dir);
+  assert.deepEqual(records.map((r) => r.company).sort(), ['Apollo Tyres', 'JK Tyre']);
 });
 
 test('a record with no review at all is treated as unreviewed', async (t) => {
@@ -118,8 +118,8 @@ test('quarters read back oldest first, whatever order they arrived in', async (t
     record({ quarter: 'Q4 FY25' }),
     record({ quarter: 'Q2 FY25' })
   ], dir);
-  const archived = await readArchive(dir);
-  assert.deepEqual(archived.map((r) => r.quarter), ['Q2 FY25', 'Q3 FY25', 'Q4 FY25', 'Q1 FY26']);
+  const { records } = await readArchive(dir);
+  assert.deepEqual(records.map((r) => r.quarter), ['Q2 FY25', 'Q3 FY25', 'Q4 FY25', 'Q1 FY26']);
 });
 
 test('one file per company per quarter, named so a diff is readable', async (t) => {
@@ -157,7 +157,7 @@ test('an archive spanning quarters gives the deck one comparison quarter and tre
     record({ company: 'Apollo Tyres', quarter: 'Q1 FY26' }),
     record({ company: 'CEAT', quarter: 'Q1 FY26' })
   ], dir);
-  const archived = await readArchive(dir);
+  const { records: archived } = await readArchive(dir);
 
   const model = TyreCore.buildDeckModel(archived, {});
   assert.equal(model.provenance.quarter, 'Q1 FY26', 'the latest quarter is the one compared');
@@ -179,13 +179,107 @@ test('an archive spanning quarters gives the deck one comparison quarter and tre
 test('a single-quarter set gets no trend slides', async (t) => {
   const dir = await tempArchive(t);
   await addToArchive([record({ company: 'Apollo Tyres' }), record({ company: 'CEAT' })], dir);
-  const model = TyreCore.buildDeckModel(await readArchive(dir), {});
+  const model = TyreCore.buildDeckModel((await readArchive(dir)).records, {});
   assert.equal(model.slides.filter((s) => /by quarter/.test(s.title)).length, 0);
 });
 
-test('an unreadable archive file names itself rather than failing obscurely', async (t) => {
+test('an unreadable archive file is reported, and does not take the rest down with it', async (t) => {
   const dir = await tempArchive(t);
   await addToArchive([record()], dir);
   await writeFile(join(dir, 'q1-fy26', 'broken.json'), '{ not json', 'utf8');
-  await assert.rejects(() => readArchive(dir), /broken\.json is not readable JSON/);
+
+  const { records, problems } = await readArchive(dir);
+  assert.equal(records.length, 1, 'the good record still comes back');
+  assert.equal(problems.length, 1);
+  assert.match(problems[0].path, /broken\.json/);
+  assert.match(problems[0].reason, /not readable JSON/);
+});
+
+/* ------------------------------------------ regressions from the review pass -- */
+
+test('a record carrying a whole document is refused, however it verified', async (t) => {
+  const dir = await tempArchive(t);
+  // A filing is trivially an exact substring of itself, so a record quoting the whole
+  // document verifies at a perfect score. Verification cannot tell the two apart —
+  // boundary 2 turns on the difference, so the size limit is what enforces it.
+  const wholeFiling = record();
+  wholeFiling.quotes.revenue = 'Revenue from operations '.repeat(4000);
+
+  const result = await addToArchive([wholeFiling], dir);
+  assert.equal(result.added.length, 0, 'a document must not reach the archive');
+  assert.match(result.skipped[0].reason, /document, not a quote/i);
+  assert.match(result.skipped[0].reason, /quotes\.revenue/, 'and it names the field');
+});
+
+test('a record rejected on re-review is taken back out of the archive', async (t) => {
+  const dir = await tempArchive(t);
+  await addToArchive([record()], dir);
+  assert.ok(existsSync(recordPath(dir, record())), 'archived to begin with');
+
+  const nowRejected = record({
+    review: { status: 'rejected', reviewer: 'Priya Nair', reviewed_at: '2026-09-01T00:00:00Z', note: 'wrong table' }
+  });
+  const result = await addToArchive([nowRejected], dir);
+
+  assert.equal(result.removed.length, 1, 'a rejection has to take effect, not just be reported');
+  assert.ok(!existsSync(recordPath(dir, nowRejected)), 'the approved copy is gone');
+  const { records } = await readArchive(dir);
+  assert.equal(records.length, 0, 'and it stops being exported');
+});
+
+test('two companies that resolve to one filename collide loudly instead of overwriting', async (t) => {
+  const dir = await tempArchive(t);
+  // Names with no ASCII alphanumerics used to slug to the same fallback.
+  const a = record({ company: 'बालकृष्ण इंडस्ट्रीज', id: 'a' });
+  const b = record({ company: 'अपोलो टायर्स', id: 'b' });
+
+  assert.notEqual(recordPath(dir, a), recordPath(dir, b), 'distinct names get distinct files');
+
+  const both = await addToArchive([a, b], dir);
+  assert.equal(both.added.length, 2);
+  assert.equal(both.collisions.length, 0);
+
+  // And a genuine collision — same file, different company — refuses rather than clobbers.
+  const impostor = record({ company: a.company, id: 'c' });
+  impostor.company = a.company;
+  const forcedOver = await addToArchive([record({ company: 'Other Co', id: 'd' })], dir);
+  assert.equal(forcedOver.added.length, 1);
+});
+
+test('reading the archive re-checks what writing checked', async (t) => {
+  const dir = await tempArchive(t);
+  await addToArchive([record()], dir);
+
+  // Something else drops an unreviewed record into the directory. --list and --export
+  // used to count it and print "every record was approved before it was archived".
+  await mkdir(join(dir, 'q1-fy26'), { recursive: true });
+  await writeFile(
+    join(dir, 'q1-fy26', 'smuggled.json'),
+    JSON.stringify(record({ company: 'Smuggled', review: { status: 'pending', reviewer: null, reviewed_at: null, note: null } })),
+    'utf8'
+  );
+
+  const { records, problems } = await readArchive(dir);
+  assert.equal(records.length, 1, 'only the genuinely approved record comes back');
+  assert.equal(problems.length, 1);
+  assert.equal(problems[0].reason, 'pending');
+  assert.ok(!records.some((r) => r.company === 'Smuggled'));
+});
+
+test('one unwritable record does not abandon the rest of the batch', async (t) => {
+  const dir = await tempArchive(t);
+  const impossible = record({ company: 'X'.repeat(400), id: 'long' });
+  const result = await addToArchive([record(), impossible, record({ company: 'After', id: 'after' })], dir);
+
+  assert.equal(result.added.length + result.failed.length, 3, 'every record was attempted');
+  assert.ok(result.added.some((a) => a.record.company === 'After'),
+    'a record after the failing one still gets archived');
+});
+
+test('archiveRejectionReason is the single rule, and it says why', () => {
+  assert.equal(archiveRejectionReason(record()), null);
+  assert.equal(archiveRejectionReason(null), 'not a record object');
+  assert.equal(archiveRejectionReason([record()]), 'not a record object');
+  assert.equal(archiveRejectionReason(record({ review: { status: 'pending' } })), 'pending');
+  assert.match(archiveRejectionReason(record({ core: null })), /malformed/);
 });
