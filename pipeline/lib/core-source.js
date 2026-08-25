@@ -201,11 +201,28 @@ function sanitizeRecordText(node) {
 //
 // Anything unrecognisable is 'pending': never approved, so it cannot reach an
 // approved-only export, and never silently treated as a rejection either.
+/**
+ * One place decides a record's review state, and it is deliberately asymmetric.
+ *
+ * A rejection is read leniently: it is the safe answer, it needs no proof, and a
+ * record that means to be rejected should be rejected however it spells it.
+ *
+ * An approval is read strictly — the exact string, nothing to trim, no case to
+ * fold. That matches the browser's rule (`ensureReview`, which has always required
+ * `=== 'approved'`) and the two halves have to agree, because they read the same
+ * files and describe them to the same person. They did not: `"  APPROVED  "` was
+ * an approval to the Node CLIs and pending to the dashboard, so one file got two
+ * answers out of what is supposed to be one contract.
+ *
+ * The asymmetry is the same one the import rule follows: a file may introduce a
+ * rejection, and may not introduce an approval.
+ */
 function reviewStatus(record) {
   if (!record || typeof record !== 'object') return 'pending';
   var raw = record.review && record.review.status;
+  if (raw === 'approved') return 'approved';
   var s = String(raw == null ? '' : raw).trim().toLowerCase();
-  return s === 'approved' || s === 'rejected' ? s : 'pending';
+  return s === 'rejected' ? 'rejected' : 'pending';
 }
 
 function isApproved(record) { return reviewStatus(record) === 'approved'; }
@@ -1227,7 +1244,12 @@ function buildDeckModel(records, opts) {
     title: 'How to read this deck',
     bullets: [
       'Every figure was copied from a company filing by an extraction step that must quote its source. A figure whose quote could not be found in the filing is not in this deck.',
-      provenance.approved + ' of ' + provenance.total + ' records were approved by a person' + (reviewers.length ? ' (' + reviewers.join(', ') + ')' : '') + '.' +
+      // "marked approved by X", not "approved by X". The deck is built from a records
+      // file, and nothing about that file proves a person made the decisions in it —
+      // approval happens in a browser, and this is a copy of what that browser wrote.
+      // Both readings are true of a genuine export; only this one is also true of a
+      // file somebody was handed.
+      provenance.approved + ' of ' + provenance.total + ' records are marked approved' + (reviewers.length ? ' by ' + reviewers.join(', ') : '') + ' in the records this deck was built from.' +
         (provenance.pending ? ' ' + provenance.pending + ' are still pending review and are marked on their slide.' : ''),
       provenance.rejected_withheld
         ? provenance.rejected_withheld + ' record' + (provenance.rejected_withheld === 1 ? '' : 's') + ' rejected in review ' + (provenance.rejected_withheld === 1 ? 'is' : 'are') + ' withheld from this deck entirely.'
@@ -1329,7 +1351,7 @@ function buildDeckModel(records, opts) {
         rows: body,
         footnote: (unreviewedInHistory
           ? unreviewedInHistory + ' of these ' + history.length + ' records have not been reviewed by a person.'
-          : 'Every figure here was approved by a person.') +
+          : 'Every figure here comes from a record marked approved.') +
           ' A blank means that quarter is not present for that company.'
       });
     });
@@ -1385,7 +1407,7 @@ function buildDeckModel(records, opts) {
       'That is what the human review step is for, and why there is no auto-accept path at any scale.',
       provenance.pending
         ? provenance.pending + ' record' + (provenance.pending === 1 ? '' : 's') + ' in this deck ' + (provenance.pending === 1 ? 'has' : 'have') + ' not been reviewed yet and should be treated as a draft.'
-        : 'Every record in this deck has been reviewed and approved by a person.',
+        : 'Every record in this deck is marked approved. That mark is made in the dashboard by the person reviewing; a deck built from a records file relays it and cannot re-check it, so the file it was built from is part of what it means.',
       tally.unquoted
         ? tally.unquoted + ' figure' + (tally.unquoted === 1 ? ' was' : 's were') + ' reported without any quote at all. Those are the first ones to check.'
         : 'Every figure in this deck arrived with a quote.',

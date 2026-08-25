@@ -27,6 +27,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { TyreCore } from './lib/core.mjs';
+import { approvalSourceNote } from './lib/report.mjs';
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const DEFAULT_DIR = join(REPO_ROOT, 'archive');
@@ -468,6 +469,9 @@ async function main(argv) {
   }
   if (result.added.length) {
     lines.push('');
+    // The archive is the one thing that outlives a run, and it takes approved records
+    // only — so this is the loudest place to say what that approval rests on.
+    lines.push(approvalSourceNote(result.added.length + result.unchanged.length, recordsPath).trimEnd());
     lines.push('  Commit the archive to keep the history. Nothing here is written unattended.');
   }
   process.stdout.write(`${lines.join('\n')}\n`);

@@ -59,12 +59,22 @@ const OUTPUTS = [
 
 const REJECTIONS = ['rejected', 'Rejected', 'REJECTED', ' rejected ', '\trejected\n', '  ReJeCtEd  '];
 
-test('reviewStatus normalises case and whitespace, and nothing else', () => {
+// The rule is asymmetric on purpose, and the asymmetry is the same one the import
+// path follows: a rejection is the safe answer and needs no proof, so it is read
+// leniently; an approval is the property the whole design rests on, so it is the
+// exact string or nothing.
+//
+// This also closes a split between the two halves. The browser has always required
+// `=== 'approved'` while the Node side trimmed and lowercased, so "  APPROVED  "
+// was an approval to the CLIs and pending in the dashboard — one contract giving
+// two answers about the same file, with the CLIs taking the more dangerous one.
+test('a rejection is read leniently and an approval strictly', () => {
   for (const spelling of REJECTIONS) {
     assert.equal(TyreCore.reviewStatus(record('x', spelling)), 'rejected', `'${spelling}'`);
   }
-  for (const spelling of ['approved', 'APPROVED', ' Approved ']) {
-    assert.equal(TyreCore.reviewStatus(record('x', spelling)), 'approved', `'${spelling}'`);
+  assert.equal(TyreCore.reviewStatus(record('x', 'approved')), 'approved');
+  for (const nearly of ['APPROVED', ' Approved ', 'approved ', 'Approved']) {
+    assert.equal(TyreCore.reviewStatus(record('x', nearly)), 'pending', `'${nearly}' is not an approval`);
   }
   // Anything unrecognisable is pending: never approved, so it cannot reach an
   // approved-only export, and never silently treated as a rejection either.
@@ -106,11 +116,14 @@ test('an unrecognised status is never treated as approved', () => {
 });
 
 test('an approved record still reaches every output', () => {
-  const records = [record(MARK, 'Approved')];
+  const records = [record(MARK, 'approved')];
   for (const output of OUTPUTS) {
     assert.ok(output.render(records).includes(MARK), `an approved record is missing from the ${output.name}`);
   }
-  assert.equal(archiveRejectionReason(record(MARK, ' APPROVED ')), null);
+  assert.equal(archiveRejectionReason(record(MARK, 'approved')), null);
+  // And a near-miss spelling is refused by the archive too, with the same reason a
+  // record nobody has looked at gets.
+  assert.equal(archiveRejectionReason(record(MARK, ' APPROVED ')), 'pending');
 });
 
 test('a records array carrying junk does not take an output down', () => {
@@ -132,4 +145,40 @@ test('the Q&A context reports review state per record and withholds rejections',
   assert.equal(prompt.record_count, 2);
   assert.match(prompt.user, /1 human-approved, 1 still pending review/);
   assert.match(prompt.user, /1 rejected record\(s\) were withheld/);
+});
+
+// The dashboard and the Node CLIs read the same files and describe them to the same
+// person, so they have to reach the same answer. They did not: the dashboard required
+// `=== 'approved'` while the Node side trimmed and lowercased, and the CLIs took the
+// more dangerous reading of the two.
+test('both halves decide review state with the same rule', async () => {
+  const { readFileSync } = await import('node:fs');
+  const html = readFileSync(new URL('../dashboard/tyre_comparison_dashboard.html', import.meta.url), 'utf8');
+  const own = html.replace(/\/\* ==== TYRE-(?:CORE|DECK|XLSX):BEGIN ====[\s\S]*?TYRE-(?:CORE|DECK|XLSX):END ==== \*\//g, '');
+
+  // The page's own code must not carry a second copy of the rule.
+  assert.doesNotMatch(own, /rev\.status === 'approved' \|\| rev\.status === 'rejected'/);
+  assert.match(own, /const status = Core\.reviewStatus\(r\)/, 'ensureReview defers to the shared rule');
+});
+
+// The CLIs cannot check an approval — they can only report where it came from. Saying
+// "1 approved record" reads as a fact the tool established; naming the file reads as
+// what it is.
+test('the CLIs name the file an approval came from', async () => {
+  const { approvalSourceNote } = await import('../pipeline/lib/report.mjs');
+  const note = approvalSourceNote(3, '/tmp/handed-to-you.json');
+  assert.match(note, /3 approvals read from \/tmp\/handed-to-you\.json/);
+  assert.match(note, /cannot re-check them/);
+  assert.equal(approvalSourceNote(0, '/tmp/x.json'), '', 'and says nothing when nothing was approved');
+});
+
+// A deck goes to people who did not run the pipeline, so its own text has to be true
+// of a file somebody was handed as well as of a genuine export.
+test('the deck says records are marked approved, not that it checked', () => {
+  const rec = record(MARK, 'approved');
+  rec.review.reviewer = 'Priya Nair (Finance)';
+  const model = TyreCore.buildDeckModel([rec], { quarter: rec.quarter });
+  const text = JSON.stringify(model);
+  assert.doesNotMatch(text, /were approved by a person/);
+  assert.match(text, /are marked approved by Priya Nair \(Finance\) in the records this deck was built from/);
 });

@@ -19,6 +19,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, resolve, join } from 'node:path';
 
 import { TyreCore } from './lib/core.mjs';
+import { approvalSourceNote } from './lib/report.mjs';
 import { TyreDeck } from './lib/deck.mjs';
 
 const USAGE = `
@@ -150,6 +151,7 @@ async function main(argv) {
     `${outPath}\n` +
     `  ${model.slides.length} slides · ${(bytes.length / 1024).toFixed(0)} KB\n` +
     `  ${p.total} compan${p.total === 1 ? 'y' : 'ies'}: ${p.approved} approved${p.pending ? `, ${p.pending} pending (marked *)` : ''}\n` +
+    approvalSourceNote(p.approved, recordsPath) +
     (p.rejected_withheld ? `  ${p.rejected_withheld} rejected record${p.rejected_withheld === 1 ? '' : 's'} withheld\n` : '') +
     (p.currencies.length > 1 ? `  ${p.currencies.length} currencies present — figures are not converted, and the slides say so\n` : '') +
     (p.pending ? '\nThis deck contains records nobody has reviewed. It is a draft.\n' : '')

@@ -12,6 +12,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 
 import { TyreCore } from './lib/core.mjs';
+import { approvalSourceNote } from './lib/report.mjs';
 import { TyreXlsx } from './lib/xlsx.mjs';
 
 const USAGE = `
@@ -127,6 +128,7 @@ async function main(argv) {
     `${outPath}\n` +
     `  ${model.sheets.length} sheets · ${(bytes.length / 1024).toFixed(0)} KB\n` +
     `  ${model.generated_for} record${model.generated_for === 1 ? '' : 's'} · ${model.comments.length} cell comments carrying the source quote\n` +
+    approvalSourceNote(model.generated_for - unreviewed, recordsPath) +
     (unreviewed ? `\n${unreviewed} row${unreviewed === 1 ? '' : 's'} say NOT REVIEWED. This is a draft.\n` : '')
   );
   return 0;

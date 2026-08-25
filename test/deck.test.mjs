@@ -288,7 +288,9 @@ test('trend slides do not claim approval they cannot vouch for', () => {
 
   const clean = TyreCore.buildDeckModel([approved('CEAT'), record({ company: 'CEAT', id: 'c2', quarter: 'Q4 FY25' })], {})
     .slides.find((s) => s.title === 'Revenue by quarter');
-  assert.match(clean.footnote, /approved by a person/i);
+  // 'comes from a record marked approved', not 'approved by a person': the deck reads a
+  // records file and relays what it says, and cannot check who decided.
+  assert.match(clean.footnote, /comes from a record marked approved/i);
 });
 
 test('characters XML cannot carry are removed before they break the package', () => {

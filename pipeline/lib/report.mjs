@@ -614,3 +614,26 @@ function table(header, rows) {
 function kvTable(pairs) {
   return table(['Field', 'Value'], pairs);
 }
+
+/**
+ * What a CLI knows about the approvals it is acting on, said out loud.
+ *
+ * Approval happens in one place: a person clicking a button in the dashboard, in
+ * their own browser. Everything on this side reads a records file, and a file is a
+ * copy of what that browser wrote — or a copy of what somebody wants us to think it
+ * wrote. There is no way to tell the two apart: a static page has no secret to sign
+ * with, so a signature would be one anybody could forge.
+ *
+ * What can be fixed is the tools' phrasing. Saying "1 approved record" reads as a
+ * fact the tool checked; naming the file it came out of reads as what it is. The
+ * deck and the workbook carry the same distinction in their own text.
+ */
+export function approvalSourceNote(count, path) {
+  if (!count) return '';
+  return [
+    `  ${count} approval${count === 1 ? '' : 's'} read from ${path}.`,
+    '  Approvals are made in the dashboard; this reads what the file records about them',
+    '  and cannot re-check them.',
+    ''
+  ].join('\n');
+}

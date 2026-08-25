@@ -371,8 +371,18 @@ xlsx block uses it.
   figure that is not in the span quoted to support it, and a figure offered with no quote
   at all. It cannot catch a figure quoted faithfully from the wrong *table*. Records are
   `pending` until a human approves them, and that gate is the safety property this whole
-  design rests on — which is why no imported file can approve anything, and why restoring
-  a backup brings the data back pending and the reviews have to be made again.
+  design rests on — which is why no file imported into the dashboard can approve anything,
+  and why restoring a backup brings the data back pending and the reviews have to be made
+  again.
+- **Approval lives in the browser, and the CLIs relay it.** That sentence above is a
+  property of the dashboard, which is where a person actually approves a record. The Node
+  tools work from a records file, and a file is a copy of what some browser wrote — or a
+  copy of what someone wants you to think it wrote. There is no way to tell those apart:
+  a static page has no secret to sign with, so a signature would be one anybody could
+  forge. So the tools say what they know: `archive`, `deck` and `workbook` each name the
+  file the approvals came out of, and the deck's own text says records are *marked*
+  approved rather than claiming it checked. Treat a records file you did not export
+  yourself the way you would treat any attachment.
 - **Not proven against a real filing.** Nothing here has been run against a live site or
   a live API. Every number in this repo came from a synthetic fixture. The routes above
   exist so that can be fixed without waiting for a key.
