@@ -8,7 +8,7 @@
 // Retrieval is only ever entered because a person triggered a run (Section 0,
 // boundary 1). There is nothing in this module that starts itself.
 
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { extname, join, resolve } from 'node:path';
 
 import { fixturePath } from '../fixtures/index.mjs';
@@ -26,6 +26,22 @@ const USER_AGENT =
 // JavaScript shell — worth failing over to the next strategy rather than sending
 // it to the extractor.
 const MIN_USEFUL_CHARS = 400;
+
+// The most we will pull off the wire, or off disk, for one filing.
+//
+// run.mjs promises that a failure on one company is recorded and the run
+// continues — "one awkward investor-relations page must never cost the other
+// eight". That promise does not survive an unbounded read: the whole response was
+// buffered before anything looked at its size, so 200 MB from a hostile or merely
+// broken IR page became about 7 GB of resident memory once the string copies in
+// htmlToText were counted, and the process aborted. A heap abort is not an
+// exception; no per-company try/catch sees it, and records.json and report.md are
+// never written at all. Refusing the read fails one company, which is the
+// behaviour that was promised.
+//
+// 64 MB is far above a real filing. A 200-page annual report PDF runs around
+// 30 MB, and a results page is a few hundred kilobytes.
+const MAX_SOURCE_BYTES = 64 * 1024 * 1024;
 
 const TEXT_EXTENSIONS = new Set(['.txt', '.md', '.text', '']);
 
@@ -191,6 +207,13 @@ async function fromFixture(path) {
 }
 
 async function fromFile(path) {
+  const { size } = await stat(path);
+  if (size > MAX_SOURCE_BYTES) {
+    throw new Error(
+      `${path} is ${(size / (1024 * 1024)).toFixed(1)} MB, past the ${Math.round(MAX_SOURCE_BYTES / (1024 * 1024))} MB limit for one filing — ` +
+      'save just the financial-statement pages, or paste the text into a .txt'
+    );
+  }
   const buf = await readFile(path);
   const ext = extname(path).toLowerCase();
 
@@ -216,7 +239,9 @@ async function fromFirecrawl(url, key, timeoutMs) {
     body: JSON.stringify({ url, formats: ['markdown'] })
   }, timeoutMs);
 
-  const body = await res.text();
+  // Firecrawl is a third party returning us a document, so its response is bounded
+  // like any other. It has never sent anything close to this.
+  const body = (await readCapped(res, FIRECRAWL_ENDPOINT, MAX_SOURCE_BYTES)).toString('utf8');
   if (!res.ok) {
     throw new Error(`firecrawl returned HTTP ${res.status} for ${url}: ${clip(body, 300)}`);
   }
@@ -259,7 +284,7 @@ async function fromHttp(url, timeoutMs) {
 
   if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText || ''} for ${url}`.trim());
 
-  const buf = Buffer.from(await res.arrayBuffer());
+  const buf = await readCapped(res, url, MAX_SOURCE_BYTES);
   const contentType = (res.headers.get('content-type') || '').toLowerCase();
 
   if (contentType.includes('pdf') || looksLikePdf(buf)) {
@@ -281,6 +306,42 @@ async function fromHttp(url, timeoutMs) {
   }
 
   return { text, bytes: buf.length, source: url };
+}
+
+/**
+ * Read a response body, stopping at `limit` rather than after it.
+ *
+ * `res.arrayBuffer()` has already allocated everything by the time it returns, so
+ * a check on the result is a check made too late. This reads the stream and gives
+ * up the moment the total passes the limit — the declared Content-Length is used
+ * only as an early exit, because a server is free to lie about it or omit it.
+ */
+async function readCapped(res, url, limit) {
+  const tooBig = (size) => new Error(
+    `${url} returned ${(size / (1024 * 1024)).toFixed(1)} MB, past the ${Math.round(limit / (1024 * 1024))} MB limit for one filing — ` +
+    'point the source at the results PDF or the filing page rather than a whole archive, or download it and re-run with --file'
+  );
+
+  const declared = Number(res.headers.get('content-length'));
+  if (Number.isFinite(declared) && declared > limit) throw tooBig(declared);
+  if (!res.body) return Buffer.from(await res.arrayBuffer());
+
+  const reader = res.body.getReader();
+  const chunks = [];
+  let total = 0;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > limit) throw tooBig(total);
+      chunks.push(value);
+    }
+  } finally {
+    // Let the socket go whether we finished or walked away from it.
+    await reader.cancel().catch(() => {});
+  }
+  return Buffer.concat(chunks);
 }
 
 async function request(url, init, timeoutMs) {

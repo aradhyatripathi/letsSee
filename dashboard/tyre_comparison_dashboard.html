@@ -909,6 +909,21 @@ function lcsLength(a, b) {
   return prev[b.length];
 }
 
+// The normalized and tokenized source, computed once.
+//
+// Normalizing runs five regex passes over the whole filing and tokenizing splits
+// the result, and verifyQuotes calls the matcher once per metric — so a record
+// with 21 quotes did all of that 21 times against a source that had not changed.
+// On a 400,000-character filing that is most of the wall clock in verification,
+// and in the browser it is the review screen not painting.
+function prepareSource(sourceText) {
+  var normalized = normalizeForMatch(sourceText);
+  var tokens = [];
+  var split = normalized.split(' ');
+  for (var i = 0; i < split.length; i++) if (split[i]) tokens.push(split[i]);
+  return { normalized: normalized, tokens: tokens };
+}
+
 // How well `quote` matches some span of `sourceText`. A verbatim quote scores 1;
 // a paraphrase, a fabrication, or a quote stitched together from words that all
 // appear in the document but not in that order scores below it.
@@ -918,16 +933,17 @@ function lcsLength(a, b) {
 // by longest common subsequence so word order counts. Scoring on the multiset
 // alone would give "revenue 812.44 ... profit 6,543.21" a perfect score against
 // a source that says the opposite.
-function quoteMatchScore(sourceText, quote) {
+function quoteMatchScore(sourceText, quote, prepared) {
   var nq = normalizeForMatch(quote);
   if (!nq) return 0;
-  var ns = normalizeForMatch(sourceText);
+  var source = prepared || prepareSource(sourceText);
+  var ns = source.normalized;
   if (!ns) return 0;
   if (ns.indexOf(nq) !== -1) return 1;
 
   var qt = tokenize(quote);
   if (!qt.length) return 0;
-  var st = tokenize(sourceText);
+  var st = source.tokens;
   if (!st.length) return 0;
 
   var want = {};
@@ -1070,6 +1086,7 @@ function verifyQuotes(rec, sourceText, opts) {
   var checks = [];
   var failed = 0;
   var unquoted = 0;
+  var prepared = prepareSource(sourceText);
 
   for (var i = 0; i < CORE_KEYS.length; i++) {
     var k = CORE_KEYS[i];
@@ -1097,7 +1114,7 @@ function verifyQuotes(rec, sourceText, opts) {
       status = 'quote_too_long';
       score = 0;
     } else {
-      score = quoteMatchScore(sourceText, quote);
+      score = quoteMatchScore(sourceText, quote, prepared);
       if (score < threshold) status = 'not_found';
       else if (hasValue && !quoteContainsValue(quote, value)) status = 'value_not_in_quote';
       else status = 'verified';

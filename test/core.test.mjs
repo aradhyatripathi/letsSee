@@ -707,3 +707,23 @@ test('an oversized quote is refused everywhere the record is presented', () => {
   const row = quotesSheet.aoa.slice(1).find((r) => r.includes('Revenue'));
   assert.ok(row && !/^verified$/.test(String(row[row.length - 1])), 'the workbook does not call it verified');
 });
+
+// Normalizing runs five regex passes over the whole filing and tokenizing splits the
+// result, and the matcher is called once per metric — so a record with 21 quotes did
+// all of that 21 times against a source that had not changed. 400ms per record in
+// Node, and in the browser the review screen not painting.
+test('the source is normalized once per record, not once per quote', () => {
+  const source = 'Revenue from operations 6,500.00 crore for the quarter. EBITDA stood at 842.55 crore. '.repeat(4500);
+  const rec = TyreCore.recToStoredShape({
+    company: 'X', quarter: 'Q1 FY26', currency: { code: 'INR', unit: 'Crore' },
+    core: Object.fromEntries(TyreCore.CORE_KEYS.map((k, i) => [k, 100 + i])),
+    core_quotes: Object.fromEntries(TyreCore.CORE_KEYS.map((k) => [k, 'Revenue from operations 6,500.00 crore for the quarter']))
+  }, { source: 'x' });
+
+  const started = process.hrtime.bigint();
+  const v = TyreCore.verifyQuotes(rec, source);
+  const ms = Number(process.hrtime.bigint() - started) / 1e6;
+
+  assert.equal(v.checked, 21, 'all twenty-one were actually checked');
+  assert.ok(ms < 150, `${ms.toFixed(0)}ms for one record over a 387k-character filing — the source is being re-normalized per quote`);
+});
