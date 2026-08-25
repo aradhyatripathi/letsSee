@@ -122,3 +122,26 @@ test('the review screen shows the outlook text, which nothing else verifies', ()
     assert.match(fn, new RegExp(`o\\.${field}`), `${field} is shown`);
   }
 });
+
+// The pipeline half fences the filing with a marker derived from the document's own
+// text. This half had its own prompt and its own fixed delimiter — <source_document>
+// tags, which a filing can close before adding a block addressed to the model. Both
+// halves send a document we did not write to a model; both need the same treatment.
+test('the browser extraction prompt fences the document too', () => {
+  const source = dashboardOnly();
+  // Scoped to the prompt assembly rather than the whole file: a comment explaining
+  // why the old delimiter is gone would otherwise fail this, and narrowing it to
+  // where the delimiter would actually do harm is the honest check anyway.
+  const promptStart = source.indexOf('const prompt = "Extract structured company financial data');
+  assert.ok(promptStart !== -1, 'the prompt is still assembled here');
+  const assembly = source.slice(promptStart, source.indexOf('const data = await callClaude', promptStart));
+
+  assert.doesNotMatch(assembly, /source_document/, 'the fixed delimiter is gone');
+  assert.match(assembly, /\+ fence \+/, 'and the document is wrapped in the derived one');
+  assert.match(source, /Core\.fenceFor\(selection\.text\)/, 'which comes from the document itself');
+
+  // The framing has to come after the document as well, or the filing's own words are
+  // the last thing the model reads.
+  assert.ok(assembly.indexOf('End of document') > assembly.lastIndexOf('+ fence'),
+    'the instructions are repeated after the closing marker');
+});

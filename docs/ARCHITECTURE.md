@@ -235,6 +235,37 @@ archived is compared on its figures and quotes rather than on who signed it off,
 re-review is not a change, while an actual change is reported and held until someone looks
 at it.
 
+## What a hostile document can and cannot do
+
+The pipeline reads documents it did not write — a scraped investor-relations page, a PDF
+somebody sent the operator — and hands them to a model. That is a real attack surface and
+it is worth being exact about its edges rather than claiming it is closed.
+
+**What it can do.** A document can contain text addressed to the model. The filing sits
+between two markers derived from a hash of its own text, so it cannot close the fence and
+open a section of its own, and the instructions are repeated after the document so the
+filing's words are never the last thing read. That is a mitigation, not a proof: a
+sufficiently persuasive document may still steer what the model returns.
+
+**What it cannot do.** Steering the model is not the same as producing a figure. Every
+core figure has to carry a quote; every quote has to be found in the source text the
+pipeline itself retrieved; and the quote has to be short enough to be a line of that
+document rather than a stand-in for it, and to contain the figure it was offered for. So
+an injected instruction cannot make a number verify against a document that does not
+report it — the most it can achieve is a record that fails its own check and arrives in
+front of a reviewer marked as failing.
+
+And nothing it produces is used until a person approves it. Approval happens in one place,
+in a browser, by a click; the deck, the workbook and the archive are approved-only, and an
+imported file cannot approve anything.
+
+**Where the real exposure is.** Not in the prompt — in the document's provenance. If the
+URL in `pipeline/config/companies.mjs` points at something that is not the company's own
+filing, everything downstream is faithfully extracted from the wrong document, and every
+check passes because the quotes really are in it. That is a question about the source
+list, and it is why `source` is stored on every record, shown on the review card, printed
+in the deck footnote, and part of what an import has to match to keep an approval.
+
 ## Consequences worth knowing
 
 - **The workbook model is data, not a spreadsheet.** Formatting decisions (widths, freeze
