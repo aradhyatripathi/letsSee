@@ -12,9 +12,10 @@
     "sync:core": "node scripts/sync-core.mjs",
     "check:core": "node scripts/sync-core.mjs --check",
     "serve:dashboard": "node scripts/serve.mjs",
-    "test": "node --test \"test/*.test.mjs\"",
+    "test": "node --test test/*.test.mjs",
     "deck": "node pipeline/deck.mjs",
-    "archive": "node pipeline/archive.mjs"
+    "archive": "node pipeline/archive.mjs",
+    "demo": "node scripts/demo.mjs"
   },
   "license": "MIT"
 }

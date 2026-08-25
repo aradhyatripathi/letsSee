@@ -5,6 +5,7 @@ node_modules/
 # schedule. `runs/` is working space for the current run only.
 runs/
 *.pdf
+demo-output/
 
 # archive/ is deliberately NOT ignored. It holds reviewed output — records a
 # person approved — which boundary 2 names as the permitted destination. It never
