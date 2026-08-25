@@ -260,6 +260,102 @@ function usableRecords(records) {
 
 // Extraction output -> stored shape. Field-for-field, no invention: anything the
 // model did not report stays null, and quotes stay exactly as returned.
+/**
+ * Force a record's fields to the types the stored shape promises, in place.
+ *
+ * recToStoredShape has always built records this way; nothing enforced it on a
+ * record that arrived some other way — an import, or storage written by an older
+ * build. That mattered more than a type usually does, because the browser half
+ * renders by string concatenation and decides whether to escape a value from what
+ * it believes the value is. It escapes company names and concatenates figures. So
+ * a records file that put a string where a number belongs — currency.fx_to_inr,
+ * any core metric, verification.unquoted, a check's score — put markup into the
+ * page, and an imported file ran script in the dashboard's origin: enough to flip
+ * a record the reviewer had rejected to approved under a forged reviewer name and
+ * save it back to storage.
+ *
+ * Escaping is fixed separately and unconditionally. This is the other half: after
+ * this runs, a field that should be a number cannot be carrying anything at all.
+ */
+function coerceRecordTypes(record) {
+  if (!record || typeof record !== 'object') return record;
+  var r = record;
+  var i;
+
+  var str = function (v) { return v == null ? null : (String(v).trim() || null); };
+  var num = function (v) { return isNum(v) ? v : null; };
+
+  r.company = str(r.company);
+  r.quarter = str(r.quarter);
+  r.source = r.source == null ? null : String(r.source);
+  r.id = r.id == null ? r.id : String(r.id);
+
+  var cur = (r.currency && typeof r.currency === 'object') ? r.currency : {};
+  var code = cur.code == null ? null : (String(cur.code).trim().toUpperCase() || null);
+  var fx = Number(cur.fx_to_inr);
+  r.currency = {
+    code: code,
+    unit: str(cur.unit),
+    fx_to_inr: isFinite(fx) && fx > 0 ? fx : fxToInr(code)
+  };
+
+  var core = (r.core && typeof r.core === 'object') ? r.core : {};
+  var quotes = (r.quotes && typeof r.quotes === 'object') ? r.quotes : {};
+  var outCore = {};
+  var outQuotes = {};
+  for (i = 0; i < CORE_KEYS.length; i++) {
+    outCore[CORE_KEYS[i]] = num(core[CORE_KEYS[i]]);
+    outQuotes[CORE_KEYS[i]] = typeof quotes[CORE_KEYS[i]] === 'string' ? quotes[CORE_KEYS[i]] : '';
+  }
+  r.core = outCore;
+  r.quotes = outQuotes;
+
+  var seg = (r.segments && typeof r.segments === 'object') ? r.segments : {};
+  var ch = (seg.channels && typeof seg.channels === 'object') ? seg.channels : {};
+  var pc = (seg.product_categories && typeof seg.product_categories === 'object') ? seg.product_categories : {};
+  var channels = {};
+  var products = {};
+  for (i = 0; i < CHANNEL_KEYS.length; i++) channels[CHANNEL_KEYS[i]] = num(ch[CHANNEL_KEYS[i]]);
+  for (i = 0; i < PRODUCT_KEYS.length; i++) products[PRODUCT_KEYS[i]] = num(pc[PRODUCT_KEYS[i]]);
+  r.segments = { channels: channels, product_categories: products };
+
+  var ol = (r.outlook && typeof r.outlook === 'object') ? r.outlook : {};
+  var outlook = {};
+  for (i = 0; i < OUTLOOK_KEYS.length; i++) outlook[OUTLOOK_KEYS[i]] = str(ol[OUTLOOK_KEYS[i]]);
+  r.outlook = outlook;
+
+  var rev = (r.review && typeof r.review === 'object') ? r.review : {};
+  r.review = {
+    status: reviewStatus(r),
+    reviewer: str(rev.reviewer),
+    reviewed_at: str(rev.reviewed_at),
+    note: rev.note == null ? null : String(rev.note),
+    flags: Array.isArray(rev.flags) ? rev.flags.map(String) : []
+  };
+
+  if (r.verification && typeof r.verification === 'object') {
+    var v = r.verification;
+    var counts = ['checked', 'verified', 'failed', 'unquoted', 'not_found', 'value_not_in_quote', 'quote_too_long', 'threshold'];
+    for (i = 0; i < counts.length; i++) v[counts[i]] = num(v[counts[i]]);
+    v.ok = v.ok === true ? true : (v.ok === false ? false : null);
+    v.checks = Array.isArray(v.checks) ? v.checks.map(function (c) {
+      var chk = (c && typeof c === 'object') ? c : {};
+      return {
+        key: chk.key == null ? '' : String(chk.key),
+        value: num(chk.value),
+        quote: typeof chk.quote === 'string' ? chk.quote : '',
+        score: num(chk.score) == null ? 0 : chk.score,
+        status: chk.status == null ? '' : String(chk.status),
+        detail: chk.detail == null ? undefined : String(chk.detail)
+      };
+    }) : [];
+  } else if (r.verification !== undefined && r.verification !== null) {
+    r.verification = null;
+  }
+
+  return sanitizeRecordText(r);
+}
+
 function recToStoredShape(rec, opts) {
   var o = opts || {};
   // Cleaned on the way in, so no stored record can carry a character the workbook, the
@@ -1609,6 +1705,7 @@ var TyreCore = {
   QUOTE_MATCH_THRESHOLD: QUOTE_MATCH_THRESHOLD,
   MAX_QUOTE_CHARS: MAX_QUOTE_CHARS,
   MAX_STORED_STRING_CHARS: MAX_STORED_STRING_CHARS,
+  coerceRecordTypes: coerceRecordTypes,
   fenceFor: fenceFor,
   SOURCE_CHAR_BUDGET: SOURCE_CHAR_BUDGET,
   EXTRACTION_SYSTEM: EXTRACTION_SYSTEM,

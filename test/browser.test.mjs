@@ -199,3 +199,144 @@ test('an import that changes a record\'s provenance loses its approval', { skip 
     assert.equal(status, 'pending', 'the approval did not carry onto a different filing');
   });
 });
+
+/* ---------------------------------------------------------- stored XSS -- */
+
+// The page builds HTML by concatenation and decided whether to escape a value from
+// what it believed the value was: company names went through esc(), figures were
+// concatenated raw. A records file decides what a figure is. A string in
+// currency.fx_to_inr, in any core metric, in verification.unquoted or in a check's
+// score therefore became markup — and an imported file ran script in this origin,
+// which was enough to flip a record the reviewer had rejected to approved under a
+// forged reviewer name and save it back to storage. The key the Settings tab
+// promises is held in memory only went out to an attacker's URL in the same way.
+//
+// This plants the payload in EVERY field rather than the four that were found,
+// because the defect was a class and a test naming four fields would go stale the
+// moment a fifth was added.
+const PAYLOAD = '<img src=x onerror="window.__xss=(window.__xss||0)+1">';
+
+function poisonEverything(value) {
+  if (typeof value === 'string' || typeof value === 'number') return PAYLOAD;
+  if (Array.isArray(value)) return value.map(poisonEverything);
+  if (value && typeof value === 'object') {
+    const out = {};
+    for (const k of Object.keys(value)) out[k] = poisonEverything(value[k]);
+    return out;
+  }
+  return PAYLOAD;
+}
+
+const TABS = ['records', 'review', 'dashboard', 'compete', 'ask', 'entry', 'settings'];
+
+test('a records file cannot put markup into the page, in any field', { skip }, async () => {
+  await withPage(async (page, errors) => {
+    // A record the reviewer rejected here, which the payload tries to approve.
+    await importPayload(page, { records: [record({ id: 'r1', company: 'Apollo Tyres' })] });
+    await page.click('[data-tab="review"]');
+    await page.click('[data-decide="rejected"]');
+    await page.waitForFunction(() => records[0].review.status === 'rejected');
+
+    const poisoned = poisonEverything(record({ id: 'evil', company: 'Zeta Rubber' }));
+    // Keep the two fields the import gate reads, so the record is accepted and the
+    // rest of it actually reaches the renderers.
+    poisoned.currency = { code: 'USD', unit: 'Million', fx_to_inr: PAYLOAD };
+    poisoned.company = 'Zeta ' + PAYLOAD;
+    poisoned.quarter = 'Q1 FY26';
+    poisoned.review = { status: PAYLOAD, reviewer: PAYLOAD, reviewed_at: PAYLOAD, note: PAYLOAD, flags: [PAYLOAD] };
+    poisoned.verification = { ok: false, checked: PAYLOAD, verified: PAYLOAD, failed: PAYLOAD, unquoted: PAYLOAD,
+      not_found: PAYLOAD, value_not_in_quote: PAYLOAD, threshold: PAYLOAD,
+      checks: [{ key: 'revenue', value: PAYLOAD, quote: PAYLOAD, score: PAYLOAD, status: PAYLOAD, detail: PAYLOAD }] };
+
+    await page.click('[data-tab="records"]');
+    await page.setInputFiles('#restore-json-input', {
+      name: 'poisoned.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify({ records: [poisoned] }))
+    });
+    await page.waitForFunction(() => records.length === 2);
+
+    // Every renderer has to run, not just the one that happens to be on screen.
+    for (const tab of TABS) {
+      await page.click(`[data-tab="${tab}"]`);
+      const html = await page.evaluate(() => document.body.innerHTML);
+      assert.ok(!html.includes('<img src=x'), `the payload rendered as markup on the ${tab} tab`);
+    }
+
+    assert.equal(await page.evaluate(() => window.__xss), undefined, 'the payload executed');
+
+    // And it is not sitting in storage waiting for the next load.
+    await page.reload();
+    await page.waitForFunction(() => typeof records !== 'undefined' && records.length === 2);
+    for (const tab of TABS) {
+      await page.click(`[data-tab="${tab}"]`);
+      assert.ok(!(await page.evaluate(() => document.body.innerHTML)).includes('<img src=x'),
+        `the payload rendered as markup on the ${tab} tab after a reload`);
+    }
+    assert.equal(await page.evaluate(() => window.__xss), undefined, 'the payload executed on reload');
+
+    // The decision the reviewer made is still theirs.
+    const state = await page.evaluate(() => records.map((r) => [r.company.slice(0, 5), r.review.status]));
+    assert.deepEqual(state.find((x) => x[0] === 'Apoll'), ['Apoll', 'rejected']);
+    assert.deepEqual(state.find((x) => x[0] === 'Zeta '), ['Zeta ', 'pending'], 'and the imported record is pending');
+
+    assert.deepEqual(errors, []);
+  });
+});
+
+// A number where a string belongs used to be just as bad in a different way: a JSON
+// number for `company` made every renderer that calls a string method on it throw, so
+// the Review, Dashboard and Competitive tabs stayed blank for good — while the import
+// reported success and the record sat in storage, reproducing the failure on reload.
+test('a record with the wrong types everywhere does not blank the page', { skip }, async () => {
+  await withPage(async (page, errors) => {
+    await importPayload(page, {
+      records: [
+        record({ id: 'ok', company: 'Apollo Tyres' }),
+        record({ id: 'weird', company: 1234, quarter: 5678, source: 42, core: { revenue: '100', ebitda: null } })
+      ]
+    });
+
+    // Every tab has to survive it; the four that list records have to still list them.
+    // (Ask is a question box and Entry a form — neither names a company until used.)
+    const LISTS_RECORDS = new Set(['records', 'review', 'dashboard', 'compete']);
+    for (const tab of TABS) {
+      await page.click(`[data-tab="${tab}"]`);
+      const text = await page.evaluate(() => document.body.innerText);
+      if (LISTS_RECORDS.has(tab)) {
+        assert.ok(text.includes('Apollo Tyres'), `the ${tab} tab lost the good record`);
+      }
+    }
+    assert.deepEqual(errors, [], 'nothing threw');
+
+    const companies = await page.evaluate(() => records.map((r) => typeof r.company));
+    assert.deepEqual(companies, ['string', 'string'], 'the numeric company became a string');
+  });
+});
+
+// loadRecords runs before the first render, so anything it throws on leaves the page
+// blank — no records tab to fix it from, no message saying why, and a reload
+// reproducing it exactly. It assumed an array of objects; storage holds whatever an
+// older build or a hand-edited backup put there.
+test('storage holding something unexpected does not leave a blank page', { skip }, async () => {
+  for (const [name, stored] of [
+    ['an object instead of an array', '{"records":[]}'],
+    ['an array with a null in it', '[null]'],
+    ['an array of primitives', '[1,"two",true]'],
+    ['a string', '"hello"'],
+    ['broken JSON', '{not json']
+  ]) {
+    await withPage(async (page, errors) => {
+      await page.evaluate((v) => localStorage.setItem('tyre-records-v2', v), stored);
+      await page.reload();
+      await page.waitForFunction(() => typeof records !== 'undefined');
+
+      assert.deepEqual(errors, [], `${name}: the page threw on load`);
+      assert.equal(await page.evaluate(() => Array.isArray(records)), true, `${name}: records is not an array`);
+
+      // And the page is usable: the tabs render and an import still works.
+      await page.click('[data-tab="records"]');
+      await importPayload(page, { records: [record({ id: 'r1', company: 'Apollo Tyres' })] });
+      const text = await page.evaluate(() => document.body.innerText);
+      assert.ok(text.includes('Apollo Tyres'), `${name}: could not recover by importing`);
+    });
+  }
+});
