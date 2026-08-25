@@ -1397,8 +1397,18 @@ function buildDeckModel(records, opts) {
   var metricByKey = {};
   CORE_METRICS.forEach(function (m) { metricByKey[m.key] = m; });
 
-  var quarters = uniqueStrings(rows.map(function (r) { return r.quarter; }));
-  var quarter = o.quarter || (quarters.length === 1 ? quarters[0] : quarters.join(', ')) || 'no quarter';
+  // Once an archive exists the input spans several quarters, and a comparison
+  // table built from all of them would list each company once per quarter and
+  // read as though they were different companies. The comparison slides are one
+  // quarter — the latest, unless asked for another — and the extra quarters
+  // become the trend slides at the end, which is the point of keeping them.
+  var history = rows.slice();
+  var quarters = uniqueStrings(history.map(function (r) { return r.quarter; }))
+    .sort(function (a, b) { return (quarterSortKey(a) || 0) - (quarterSortKey(b) || 0); });
+  var quarter = o.quarter || quarters[quarters.length - 1] || 'no quarter';
+  if (quarters.length) {
+    rows = history.filter(function (r) { return String(r.quarter || '') === quarter; });
+  }
 
   var currencies = uniqueStrings(rows.map(function (r) {
     return r.currency ? [r.currency.code, r.currency.unit].filter(Boolean).join(' ') : '';
@@ -1424,6 +1434,8 @@ function buildDeckModel(records, opts) {
 
   var provenance = {
     total: rows.length,
+    quarter: quarter,
+    archived_quarters: quarters,
     approved: approved.length,
     pending: pending.length,
     rejected_withheld: rejected.length,
@@ -1533,6 +1545,35 @@ function buildDeckModel(records, opts) {
     }),
     footnote: pendingNote(rows)
   });
+
+  if (quarters.length > 1) {
+    [
+      { key: 'revenue', title: 'Revenue by quarter' },
+      { key: 'ebitda_margin', title: 'EBITDA margin by quarter' }
+    ].forEach(function (trend) {
+      var metric = metricByKey[trend.key];
+      var companies = uniqueStrings(history.map(function (r) { return r.company; })).sort();
+      var body = companies.map(function (name) {
+        var line = [name];
+        quarters.forEach(function (q) {
+          var found = null;
+          history.forEach(function (r) {
+            if (String(r.company || '') === name && String(r.quarter || '') === q) found = r;
+          });
+          var v = found && found.core ? found.core[trend.key] : null;
+          line.push(isNum(v) ? formatMetric(v, metric, null) : DASH);
+        });
+        return line;
+      });
+      pushTableSlides(slides, {
+        title: trend.title,
+        subtitle: quarters.length + ' quarters of approved records · as reported, never converted',
+        columns: ['Company'].concat(quarters),
+        rows: body,
+        footnote: 'Every figure here was approved by a person before it was archived. A blank means that quarter is not in the archive for that company.'
+      });
+    });
+  }
 
   pushBulletSlides(slides, {
     title: 'Outlook — raw materials',

@@ -6,6 +6,11 @@ node_modules/
 runs/
 *.pdf
 
+# archive/ is deliberately NOT ignored. It holds reviewed output — records a
+# person approved — which boundary 2 names as the permitted destination. It never
+# holds a retrieved filing; pipeline/archive.mjs refuses anything unapproved, and
+# test/archive.test.mjs fails if a document-sized string ever lands in one.
+
 .DS_Store
 .env
 .env.*

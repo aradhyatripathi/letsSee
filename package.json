@@ -13,7 +13,8 @@
     "check:core": "node scripts/sync-core.mjs --check",
     "serve:dashboard": "node scripts/serve.mjs",
     "test": "node --test \"test/*.test.mjs\"",
-    "deck": "node pipeline/deck.mjs"
+    "deck": "node pipeline/deck.mjs",
+    "archive": "node pipeline/archive.mjs"
   },
   "license": "MIT"
 }
