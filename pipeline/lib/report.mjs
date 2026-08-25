@@ -159,7 +159,9 @@ export function buildRunReport(runResult) {
           return [
             metric ? metric.label : chk.key,
             TyreCore.formatMetric(chk.value, metric, c.record.currency),
-            chk.status === 'unquoted' ? 'no quote returned' : `not found in source (best match ${chk.score})`,
+            chk.status === 'unquoted' ? 'no quote returned'
+              : chk.status === 'quote_too_long' ? (chk.detail || `a ${chk.quote.length}-character section of the filing, not the line reporting the figure`)
+              : `not found in source (best match ${chk.score})`,
             chk.quote ? `"${clip(chk.quote, 160)}"` : '—'
           ];
         });

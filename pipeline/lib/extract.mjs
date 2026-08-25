@@ -419,6 +419,7 @@ function summarise(verification) {
 const CHECK_LABELS = {
   not_found: 'no matching span in the filing',
   value_not_in_quote: 'the quote is in the filing but does not contain the figure',
+  quote_too_long: 'a section of the filing was returned instead of the line reporting the figure',
   unquoted: 'a figure was reported with no quote at all'
 };
 
@@ -471,12 +472,16 @@ function buildCorrection(problems, threshold) {
       return `  - ${c.key}: reported as ${c.value}, but ${JSON.stringify(c.quote)} does not contain that figure` +
         ' (this is usually the wrong comparative column)';
     }
+    if (c.status === 'quote_too_long') {
+      return `  - ${c.key}: ${c.detail || `the quote is ${c.quote.length} characters`}. Quote the single line that` +
+        ` reports the figure, at most ${TyreCore.MAX_QUOTE_CHARS} characters.`;
+    }
     return `  - ${c.key}: ${JSON.stringify(c.quote)} — matched only ${Math.round(c.score * 100)}% of the source wording`;
   });
   return [
     'CORRECTION — your previous answer was rejected before it was stored.',
     '',
-    `Every figure must carry a quote that is in the filing text above and that contains the figure itself; these did not (match threshold ${Math.round(threshold * 100)}%):`,
+    `Every figure must carry a short quote that is in the filing text above and that contains the figure itself; these did not (match threshold ${Math.round(threshold * 100)}%, quote limit ${TyreCore.MAX_QUOTE_CHARS} characters):`,
     ...lines,
     '',
     'Re-extract the whole object. For each field listed, either copy an exact span from',

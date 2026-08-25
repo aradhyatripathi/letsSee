@@ -1012,6 +1012,54 @@ function quoteContainsValue(quote, value) {
 
 var QUOTE_MATCH_THRESHOLD = 0.85;
 
+// A quote is a span, not a document.
+//
+// Without this bound the central safety property is vacuous. quoteMatchScore's
+// fast path asks whether the normalized quote appears in the normalized source,
+// and a document is trivially a substring of itself — so a record whose "quote"
+// for PAT is the whole filing scores 1 and is marked verified, and
+// quoteContainsValue then only has to find the figure somewhere in those
+// thousands of characters. A filing stating PAT of 300 crore will happily
+// "verify" a reported PAT of 4321 because 4321 is the headcount two lines down.
+//
+// pipeline/archive.mjs already knew this and refused such a record at the
+// archive (MAX_STRING_CHARS). That was the wrong place: everything between
+// extraction and the archive — the reviewer's green badge, the deck's "N of N
+// quotes verified" footnote, the workbook's Verification column, the quote the
+// Q&A model is told to cite — had already repeated the claim.
+//
+// 400 characters: the quotes the offline extractor produces from the fixtures
+// run 22-84 characters (median 66), and a P&L caption with three comparative
+// columns and a long line label is comfortably under 200. Anything past 400 is
+// not a citation of a figure, whatever else it may be.
+var MAX_QUOTE_CHARS = 400;
+
+// The absolute cap is not the whole rule, because it is only a citation relative
+// to the thing cited. A 199-character "filing" quoted in full is 199 characters —
+// inside the cap, and still evidence of nothing: the figure is "in the quote"
+// only in the sense that it is somewhere in the document.
+//
+// Half is deliberately loose. A real quote is a line out of a filing, so it runs
+// a few percent of the source at most; the fixtures come to 1-2%. The bound is
+// set where no honest quote can reach it, so that it only ever fires on a quote
+// that is standing in for the document.
+var MAX_QUOTE_SOURCE_SHARE = 0.5;
+
+// Is this a citation of a line, or a stand-in for the document? Returns the
+// reason it is not a citation, or '' when it is one — phrased for the reviewer,
+// because they are the person who has to act on it.
+function oversizeReason(quote, sourceText) {
+  var len = quote.length;
+  if (len > MAX_QUOTE_CHARS) {
+    return len + ' characters — a section of the filing, not the line reporting the figure (the limit is ' + MAX_QUOTE_CHARS + ')';
+  }
+  var sourceLen = String(sourceText == null ? '' : sourceText).length;
+  if (sourceLen && len > sourceLen * MAX_QUOTE_SOURCE_SHARE) {
+    return 'the quote is ' + Math.round((len / sourceLen) * 100) + '% of the whole document, so it points at no particular figure in it';
+  }
+  return '';
+}
+
 // Section 4 / Stage 2: this is the actual enforcement of "never fabricate a
 // quote". Every non-empty quote must be traceable back to the retrieved source
 // text; a number reported without a quote is flagged rather than silently kept.
@@ -1038,13 +1086,26 @@ function verifyQuotes(rec, sourceText, opts) {
       continue;
     }
 
-    var score = quoteMatchScore(sourceText, quote);
+    // Size is checked before matching, not after: an oversized quote is not a
+    // low-scoring quote, it is a quote that would score 1 for the wrong reason.
+    // Checking first also keeps the matcher's cost bounded by MAX_QUOTE_CHARS
+    // rather than by whatever length a filing hands us.
     var status;
-    if (score < threshold) status = 'not_found';
-    else if (hasValue && !quoteContainsValue(quote, value)) status = 'value_not_in_quote';
-    else status = 'verified';
+    var score;
+    var detail = oversizeReason(quote, sourceText);
+    if (detail) {
+      status = 'quote_too_long';
+      score = 0;
+    } else {
+      score = quoteMatchScore(sourceText, quote);
+      if (score < threshold) status = 'not_found';
+      else if (hasValue && !quoteContainsValue(quote, value)) status = 'value_not_in_quote';
+      else status = 'verified';
+    }
     if (status !== 'verified') failed++;
-    checks.push({ key: k, value: hasValue ? value : null, quote: quote, score: Math.round(score * 1000) / 1000, status: status });
+    var check = { key: k, value: hasValue ? value : null, quote: quote, score: Math.round(score * 1000) / 1000, status: status };
+    if (detail) check.detail = detail;
+    checks.push(check);
   }
 
   return {
@@ -1060,6 +1121,7 @@ function verifyQuotes(rec, sourceText, opts) {
     failed: failed,
     not_found: checks.filter(function (c) { return c.status === 'not_found'; }).length,
     value_not_in_quote: checks.filter(function (c) { return c.status === 'value_not_in_quote'; }).length,
+    quote_too_long: checks.filter(function (c) { return c.status === 'quote_too_long'; }).length,
     unquoted: unquoted,
     checks: checks
   };
@@ -1145,8 +1207,10 @@ var EXTRACTION_SYSTEM = [
   '',
   'Rules, in order of importance:',
   '1. Never fabricate a quote. Every value in core_quotes must be a short span copied',
-  '   character-for-character from the source text. If you cannot copy an exact span',
-  '   supporting a figure, return "" for that quote and null for that figure.',
+  '   character-for-character from the source text — the line that reports the figure,',
+  '   at most ' + MAX_QUOTE_CHARS + ' characters. A longer span is rejected: quoting a whole section',
+  '   proves nothing about which number in it you meant. If you cannot copy an exact',
+  '   span supporting a figure, return "" for that quote and null for that figure.',
   '2. Never estimate, derive, annualize, or infer a number. If the filing does not state',
   '   it, the value is null. A margin you computed yourself is not a reported margin.',
   '3. Detect currency and unit explicitly from the source (e.g. "INR"/"Crore",',
@@ -1585,7 +1649,7 @@ function buildDeckModel(records, opts) {
   var pending = rows.filter(function (r) { return reviewStatus(r) === 'pending'; });
   var reviewers = uniqueStrings(approved.map(function (r) { return r.review && r.review.reviewer; }));
 
-  var tally = { verified: 0, not_found: 0, value_not_in_quote: 0, unquoted: 0, checked: 0 };
+  var tally = { verified: 0, not_found: 0, value_not_in_quote: 0, quote_too_long: 0, unquoted: 0, checked: 0 };
   rows.forEach(function (r) {
     var v = r.verification;
     if (!v) return;
@@ -1595,6 +1659,7 @@ function buildDeckModel(records, opts) {
     (v.checks || []).forEach(function (c) {
       if (c.status === 'not_found') tally.not_found++;
       if (c.status === 'value_not_in_quote') tally.value_not_in_quote++;
+      if (c.status === 'quote_too_long') tally.quote_too_long++;
     });
   });
 
@@ -1971,6 +2036,7 @@ var TyreCore = {
   OUTLOOK_KEYS: OUTLOOK_KEYS,
   FX_TO_INR: FX_TO_INR,
   QUOTE_MATCH_THRESHOLD: QUOTE_MATCH_THRESHOLD,
+  MAX_QUOTE_CHARS: MAX_QUOTE_CHARS,
   SOURCE_CHAR_BUDGET: SOURCE_CHAR_BUDGET,
   EXTRACTION_SYSTEM: EXTRACTION_SYSTEM,
   QA_SYSTEM: QA_SYSTEM,
@@ -3155,9 +3221,38 @@ async function loadRecords(){
     records = res ? JSON.parse(res.value) : [];
   }catch(e){ records = []; }
   records.forEach(r => { hydrate(r); });
+  // Storage can hold whatever an older build (or a hand-edited backup) put there,
+  // so the invariant is re-established on the way in, not only on the way out.
+  dedupeRecordIds();
   renderRecords(); renderReview(); renderDashboard(); renderCompeteChips(); renderCompete();
 }
+// No two records may share an id, ever.
+//
+// Half the app addresses a record by looking its id up in `records`, which returns
+// the first match. Ids arrive from imported files, so a file carrying two records
+// with one id made every one of those lookups resolve to the wrong object: the
+// edit form loaded a different record's figures, and an Approve click landed on a
+// different company. This runs at the single point every mutation passes through,
+// so the invariant holds regardless of which path put the record there.
+function dedupeRecordIds(){
+  const seen = new Set();
+  let repaired = 0;
+  for (const r of records){
+    if (!r || typeof r !== 'object') continue;
+    if (!r.id) r.id = Core.recordId(r.company, r.quarter, r.source || null);
+    if (!seen.has(r.id)){ seen.add(r.id); continue; }
+    const base = r.id;
+    let n = 2;
+    while (seen.has(base + '-' + n)) n++;
+    r.id = base + '-' + n;
+    seen.add(r.id);
+    repaired++;
+  }
+  return repaired;
+}
+
 async function saveRecords(){
+  dedupeRecordIds();
   try{ await store.set(STORAGE_KEY, JSON.stringify(records), false); }
   catch(e){ toast('Save failed — try again'); }
 }
@@ -3422,8 +3517,25 @@ let reviewerName = '';
 // switching a record from INR/Crore to USD/Million changes every number on every
 // chart and in the workbook by two orders of magnitude while the stored digits
 // stay put. Leaving it out let an approval survive exactly that edit.
+// What a reviewer is deciding about when they approve a record.
+//
+// It is not only the figures. `source` is the filing the decision was made against
+// and the verification outcome is the evidence that was on screen at the time, so
+// an import that keeps the local approval while replacing either of those has
+// carried the decision onto something the person did not look at. Both are folded
+// in here, which puts such an import back where it belongs: pending.
+//
+// The verification digest is the outcome rather than the whole block, so a
+// cosmetic field an earlier import added does not force a re-review.
+function verificationDigest(r){
+  const v = r.verification;
+  if (!v) return null;
+  return [v.ok, v.checked, v.verified, v.failed, v.unquoted, v.threshold,
+    (v.checks || []).map(c => [c.key, c.status, c.score])];
+}
 function reviewableContent(r){
-  return JSON.stringify([r.company, r.quarter, r.currency, r.core, r.quotes, r.segments, r.outlook]);
+  return JSON.stringify([r.company, r.quarter, r.currency, r.core, r.quotes, r.segments, r.outlook,
+    r.source || null, verificationDigest(r)]);
 }
 function reviewCounts(){
   const c = { pending: 0, approved: 0, rejected: 0, failing: 0 };
@@ -3438,6 +3550,7 @@ const CHECK_LABEL = {
   verified: 'verified',
   not_found: 'quote not in document',
   value_not_in_quote: 'figure not in quote',
+  quote_too_long: 'a section, not a quote',
   unquoted: 'no quote stored',
 };
 function checkMapFor(r){
@@ -3488,7 +3601,29 @@ function outlookForReview(r){
     + '</div>';
 }
 
+// A card addresses the record object it was rendered from, not that record's id.
+//
+// Every action used to resolve with `records.find(x => x.id === id)`, which
+// returns the FIRST record carrying that id. Ids arrive from imported files, so
+// two records could share one — and then a click on the second card approved the
+// first. With a look-alike company name (a zero-width space is enough) both cards
+// and the confirmation toast read identically, so nothing on screen said what had
+// happened. Uniqueness is now enforced on import as well; this is the half that
+// does not depend on it holding.
+//
+// The map is rebuilt on every render, so a token from a stale card resolves to
+// nothing and the click does nothing — which is the correct outcome for a button
+// whose record is no longer on screen.
+let reviewHandles = new Map();
+let reviewHandleSeq = 0;
+function reviewHandle(r){
+  const token = 'rv' + (++reviewHandleSeq);
+  reviewHandles.set(token, r);
+  return token;
+}
+
 function renderReview(){
+  reviewHandles = new Map();
   const counts = reviewCounts();
   const tabCount = $('tab-review-count');
   if (tabCount) tabCount.textContent = counts.pending ? '(' + counts.pending + ')' : '';
@@ -3513,6 +3648,7 @@ function renderReview(){
   wrap.innerHTML = shown.slice().sort((a,b) =>
     (a.company || '').localeCompare(b.company || '') || (a.quarter || '').localeCompare(b.quarter || '')
   ).map(r => {
+    const handle = reviewHandle(r);
     const rev = ensureReview(r);
     const v = r.verification;
     const checks = checkMapFor(r);
@@ -3524,6 +3660,7 @@ function renderReview(){
       const bits = [];
       if (v.not_found) bits.push(v.not_found + ' quote' + (v.not_found === 1 ? '' : 's') + ' could not be found in the source document');
       if (v.value_not_in_quote) bits.push(v.value_not_in_quote + ' quote' + (v.value_not_in_quote === 1 ? ' is real but does not contain the figure' : 's are real but do not contain their figures') + ' — usually a number read from the wrong comparative column');
+      if (v.quote_too_long) bits.push(v.quote_too_long + ' quote' + (v.quote_too_long === 1 ? ' is' : 's are') + ' a whole section of the filing rather than the line reporting the figure, which proves nothing about which number in it was meant');
       banners += '<div class="rv-alarm">Quote check failed: ' + esc(bits.join('; ')) + '. Do not approve this without opening the filing.</div>';
     }
     if (v && v.unquoted) banners += '<div class="rv-warn">' + v.unquoted + ' figure' + (v.unquoted === 1 ? ' was' : 's were') + ' reported with no quote at all. Nothing can verify them — check them against the filing yourself.</div>';
@@ -3537,7 +3674,7 @@ function renderReview(){
       const chk = checks[m.key];
       const status = chk ? chk.status : (quote ? 'unchecked' : (Core.isNum(val) ? 'unquoted' : 'unchecked'));
       const flagged = rev.flags.indexOf(m.key) !== -1;
-      const rowCls = (status === 'not_found' || status === 'value_not_in_quote') ? 'bad'
+      const rowCls = (status === 'not_found' || status === 'value_not_in_quote' || status === 'quote_too_long') ? 'bad'
                    : (status === 'unquoted' ? 'unq' : '');
       const label = CHECK_LABEL[status] || 'not checked';
       const score = chk && chk.score !== undefined && status !== 'unquoted' ? ' <span style="color:var(--text-mute);">(match ' + chk.score + ')</span>' : '';
@@ -3546,7 +3683,7 @@ function renderReview(){
         + '<td class="val">' + esc(Core.formatMetric(val, m, cur)) + '</td>'
         + '<td class="quote">' + (quote ? '“' + esc(quote) + '”' : '<i>no quote stored</i>') + '</td>'
         + '<td>' + esc(label) + score + '</td>'
-        + '<td><button type="button" class="flagbtn' + (flagged ? ' on' : '') + '" data-flag="' + escAttr(m.key) + '" data-id="' + escAttr(r.id) + '">' + (flagged ? 'flagged' : 'flag') + '</button></td>'
+        + '<td><button type="button" class="flagbtn' + (flagged ? ' on' : '') + '" data-flag="' + escAttr(m.key) + '" data-rv="' + handle + '">' + (flagged ? 'flagged' : 'flag') + '</button></td>'
         + '</tr>';
     }).join('');
 
@@ -3563,17 +3700,17 @@ function renderReview(){
       + outlookForReview(r)
       + noteLine + whenLine
       + '<div class="rv-actions">'
-      + '<input type="text" id="note-' + escAttr(r.id) + '" placeholder="optional note — why you approved or rejected">'
-      + '<button type="button" class="btn btn-approve" data-decide="approved" data-id="' + escAttr(r.id) + '">Approve this record</button>'
-      + '<button type="button" class="btn btn-reject" data-decide="rejected" data-id="' + escAttr(r.id) + '">Reject</button>'
+      + '<input type="text" id="note-' + handle + '" placeholder="optional note — why you approved or rejected">'
+      + '<button type="button" class="btn btn-approve" data-decide="approved" data-rv="' + handle + '">Approve this record</button>'
+      + '<button type="button" class="btn btn-reject" data-decide="rejected" data-rv="' + handle + '">Reject</button>'
       + '</div></div>';
   }).join('');
 }
 
-async function decideRecord(id, status){
-  const r = records.find(x => x.id === id);
+async function decideRecord(handle, status){
+  const r = reviewHandles.get(handle);
   if (!r) return;
-  const noteEl = $('note-' + id);
+  const noteEl = $('note-' + handle);
   const note = noteEl && noteEl.value.trim() ? noteEl.value.trim() : null;
   const rev = ensureReview(r);
   if (status === 'approved' && r.verification && r.verification.ok === false){
@@ -3584,8 +3721,8 @@ async function decideRecord(id, status){
   renderReview(); renderRecords();
   toast(status === 'approved' ? 'Approved ' + r.company + ' — ' + r.quarter : 'Rejected ' + r.company + ' — ' + r.quarter);
 }
-async function toggleFlag(id, key){
-  const r = records.find(x => x.id === id);
+async function toggleFlag(handle, key){
+  const r = reviewHandles.get(handle);
   if (!r) return;
   const rev = ensureReview(r);
   const at = rev.flags.indexOf(key);
@@ -3595,9 +3732,9 @@ async function toggleFlag(id, key){
 }
 $('review-wrap').addEventListener('click', (e) => {
   const decide = e.target.closest('[data-decide]');
-  if (decide){ decideRecord(decide.dataset.id, decide.dataset.decide); return; }
+  if (decide){ decideRecord(decide.dataset.rv, decide.dataset.decide); return; }
   const flag = e.target.closest('[data-flag]');
-  if (flag){ toggleFlag(flag.dataset.id, flag.dataset.flag); }
+  if (flag){ toggleFlag(flag.dataset.rv, flag.dataset.flag); }
 });
 $('review-filter-chips').addEventListener('click', (e) => {
   const chip = e.target.closest('[data-filter]');
@@ -4277,8 +4414,10 @@ async function extractWithClaude(sourceText, opts){
   const selection = Core.selectFinancialText(sourceText);
   const retryBlock = (o.retryFields && o.retryFields.length)
     ? "\n\nTHIS IS A RETRY. The previous answer failed verification: each quote below was checked back against the document and did not hold up.\n"
-      + o.retryFields.map(f => "- " + f.key + ": " + (f.status === 'not_found'
-          ? 'the quote you gave does not appear in the document at all'
+      + o.retryFields.map(f => "- " + f.key + ": " + (
+          f.status === 'not_found' ? 'the quote you gave does not appear in the document at all'
+          : f.status === 'quote_too_long' ? (f.detail || 'you returned ' + f.quote.length + ' characters') + '. Quote the single line that reports the figure, at most ' + Core.MAX_QUOTE_CHARS + ' characters.'
+          : f.status === 'unquoted' ? 'you reported ' + f.value + ' with no quote at all'
           : 'the quote appears in the document but does not contain the figure you reported (' + f.value + ') — you have most likely read the number from a different comparative column')).join('\n')
       + "\nFor each of those fields: copy an exact span from the document that contains that figure, character for character, or return null for the figure and \"\" for its quote. Do not paraphrase, do not stitch words together from different lines, and never adjust a number so it matches a quote.\n"
     : "";
@@ -4289,7 +4428,7 @@ async function extractWithClaude(sourceText, opts){
     + "\n\nRules:\n"
     + "- Use null (or empty string for text fields) for anything not explicitly stated or directly computable. Never estimate or invent a number.\n"
     + "- Detect the reporting currency and unit/scale from the document (e.g. '₹ crore', '€ million', '₩ billion') and fill the currency object. If genuinely unclear, leave both null — the app will assume INR/Crore as a fallback, so get this right when the source states it.\n"
-    + "- For core_quotes, give a short exact quote (max ~15 words) directly from the source for each figure so it can be manually verified against the document. Leave as empty string if you can't quote it directly — never fabricate a quote.\n"
+    + "- For core_quotes, give a short exact quote (max ~15 words, and never more than " + Core.MAX_QUOTE_CHARS + " characters) directly from the source for each figure so it can be manually verified against the document. Quote the line that reports the figure, not the section around it. Leave as empty string if you can't quote it directly — never fabricate a quote.\n"
     + "- Every quote is checked back against this document automatically. A quote that is not in the document, or that does not contain the figure it supports, fails the whole record — so copy spans, never reconstruct them.\n"
     + "- Paraphrase outlook fields in your own words — do not quote the source verbatim.\n"
     + "- Numbers should be plain numbers (no currency symbols, no commas).\n"
@@ -4380,10 +4519,32 @@ function recToStoredShape(rec, existingId, filename){
   return stored;
 }
 
+// Why one check failed, in the reviewer's language.
+//
+// Written as a lookup with a fallback rather than an if/else over the statuses
+// that existed when it was written: the failure list used to be spelled out as
+// `not_found || value_not_in_quote` in four places, so when a new failure kind
+// was added the record was refused with an empty explanation of why.
+function verifyFailureReason(c, threshold){
+  if (c.status === 'not_found'){
+    return 'not_found — no span in your document matches this quote (best match ' + c.score + ' against a threshold of ' + threshold + ')';
+  }
+  if (c.status === 'value_not_in_quote'){
+    return 'value_not_in_quote — the quote is genuinely in the document, but it does not contain ' + c.value + '. Usually a figure read from the wrong comparative column.';
+  }
+  if (c.status === 'quote_too_long'){
+    return 'quote_too_long — ' + (c.detail || c.quote.length + ' characters') + '. A quote that stands in for the document proves nothing about which number in it was meant.';
+  }
+  if (c.status === 'unquoted'){
+    return 'unquoted — a figure was reported with no quote at all, so there is nothing to check it against.';
+  }
+  return c.status;
+}
+
 // Renders the audit trail of a failed verification: which figures could not be
-// traced, and which of the two ways they failed.
+// traced, and in which way each one failed.
 function renderVerifyFailure(file, stored, verification, selection){
-  const failures = verification.checks.filter(c => c.status === 'not_found' || c.status === 'value_not_in_quote');
+  const failures = verification.checks.filter(c => c.status !== 'verified');
   const cur = ensureCurrency(stored);
   const byMetric = {};
   Core.CORE_METRICS.forEach(m => { byMetric[m.key] = m; });
@@ -4395,10 +4556,7 @@ function renderVerifyFailure(file, stored, verification, selection){
     + failures.map(c => '<tr class="bad"><td>' + esc((byMetric[c.key] || {}).label || c.key) + '</td>'
         + '<td>' + esc(Core.formatMetric(c.value, byMetric[c.key], cur)) + '</td>'
         + '<td class="quote">' + (c.quote ? '“' + esc(c.quote) + '”' : '<i>none</i>') + '</td>'
-        + '<td>' + (c.status === 'not_found'
-            ? 'not_found — no span in your document matches this quote (best match ' + c.score + ' against a threshold of ' + verification.threshold + ')'
-            : 'value_not_in_quote — the quote is genuinely in the document, but it does not contain ' + c.value + '. Usually a figure read from the wrong comparative column.')
-        + '</td></tr>').join('')
+        + '<td>' + esc(verifyFailureReason(c, verification.threshold)) + '</td></tr>').join('')
     + '</tbody></table>'
     + '<p class="sub" style="margin-top:12px;">Nothing was saved. You can re-upload (a different text layer or a cleaner copy of the filing often fixes it), or add the record by hand from the figures you can see in the document.</p>';
   $('extract-verify').style.display = 'block';
@@ -4433,7 +4591,7 @@ $('extract-btn').addEventListener('click', async () => {
     stored.verification = Core.verifyQuotes(stored, text);
 
     if (!stored.verification.ok){
-      const failed = stored.verification.checks.filter(c => c.status === 'not_found' || c.status === 'value_not_in_quote');
+      const failed = stored.verification.checks.filter(c => c.status !== 'verified');
       statusEl.textContent = failed.length + ' quote(s) did not check out — re-extracting once with those fields named…';
       out = await extractWithClaude(text, { retryFields: failed });
       stored = recToStoredShape(out.rec, null, file.name);

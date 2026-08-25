@@ -46,16 +46,36 @@ function shortHash(value) {
   return h.toString(36).slice(0, 6);
 }
 
-/** The longest string anywhere in a record, and where it was. */
+// How deep a record may nest before we stop calling it a record.
+//
+// A real one is four levels at most (record.segments.channels.replacement). The
+// cap exists because this walk used to recurse, and a records file carrying a
+// 20,000-deep object overflowed the stack — which mattered far more than it
+// sounds: the throw escaped the per-record try/catch, so the whole pass stopped
+// at that record. Every record after it went unprocessed, including the rejection
+// branch that removes an archived copy, so a record someone had rejected stayed
+// in the archive and kept being exported under a line saying everything in the
+// file had been checked. V8 parses that depth happily and only detonates here.
+const MAX_RECORD_DEPTH = 64;
+
+/**
+ * The longest string anywhere in a record, and where it was.
+ *
+ * Iterative with an explicit stack, and it reports excessive depth rather than
+ * dying of it: a structure this deep is malformed, and saying so is the answer.
+ */
 function longestString(record) {
-  let worst = { len: 0, path: null };
-  (function walk(node, path) {
+  let worst = { len: 0, path: null, tooDeep: false };
+  const stack = [[record, '', 0]];
+  while (stack.length) {
+    const [node, path, depth] = stack.pop();
     if (typeof node === 'string') {
-      if (node.length > worst.len) worst = { len: node.length, path: path || '(root)' };
+      if (node.length > worst.len) worst = { ...worst, len: node.length, path: path || '(root)' };
     } else if (node && typeof node === 'object') {
-      for (const [k, v] of Object.entries(node)) walk(v, path ? `${path}.${k}` : k);
+      if (depth >= MAX_RECORD_DEPTH) { worst.tooDeep = true; continue; }
+      for (const [k, v] of Object.entries(node)) stack.push([v, path ? `${path}.${k}` : k, depth + 1]);
     }
-  })(record, '');
+  }
   return worst;
 }
 
@@ -153,7 +173,17 @@ export async function readArchive(dir) {
         problems.push({ path, reason: `not readable JSON — ${err.message}` });
         continue;
       }
-      const reason = archiveRejectionReason(parsed);
+      // Anything this check throws on is a problem with that file, reported as one.
+      // A throw here used to escape readArchive entirely, so a single bad file in the
+      // archive directory bricked --list and --export — the precise opposite of this
+      // function's contract, which is that a file that is not an approved, well-formed
+      // record is reported rather than returned.
+      let reason;
+      try {
+        reason = archiveRejectionReason(parsed);
+      } catch (err) {
+        reason = `could not be checked — ${err.message}`;
+      }
       if (reason) problems.push({ path, reason });
       else records.push(parsed);
     }
@@ -176,6 +206,9 @@ export function archiveRejectionReason(record) {
   if (problems.length) return `malformed: ${problems.join('; ')}`;
 
   const worst = longestString(record);
+  if (worst.tooDeep) {
+    return `it nests more than ${MAX_RECORD_DEPTH} levels deep — a record is four at most, so this is not one`;
+  }
   if (worst.len > MAX_STRING_CHARS) {
     return `${worst.path} holds ${worst.len.toLocaleString('en-US')} characters — that is a document, not a quote (limit ${MAX_STRING_CHARS})`;
   }
@@ -217,31 +250,54 @@ export async function addToArchive(records, dir, { force = false } = {}) {
       continue;
     }
 
+    // From here on, everything about this one record is inside a try. The comment on
+    // the write below says one bad record must not abort the loop; it was true of the
+    // write and not of the checks, and a record that threw during a check stopped the
+    // pass — silently, because the summary is printed after the loop.
+
     // A record approved and archived, then rejected on re-review, used to stay in the
     // archive and keep being exported while the run printed a line implying the
     // rejection had taken effect. A rejection now takes the archived copy out, which is
     // the only reading of "reviewed output" that survives someone changing their mind.
-    if (TyreCore.isRejected(record)) {
-      if (existsSync(path)) {
-        try {
-          await rm(path);
-          result.removed.push({ record, path });
-        } catch (err) {
-          result.failed.push({ record, path, error: err.message });
-        }
-      } else {
-        result.skipped.push({ record, reason: 'rejected' });
-      }
-      continue;
-    }
-
-    const reason = archiveRejectionReason(record);
-    if (reason) {
-      result.skipped.push({ record, reason });
-      continue;
-    }
-
     try {
+      if (TyreCore.isRejected(record)) {
+        if (!existsSync(path)) {
+          result.skipped.push({ record, reason: 'rejected' });
+          continue;
+        }
+        // A rejection deletes a file, so it has to prove it is about that file.
+        //
+        // The path is a slug of company and quarter, and slugging is lossy:
+        // "APOLLO   TYRES!!" / "q4  fy25" resolves to apollo-tyres.json under
+        // q4-fy25 just as "Apollo Tyres" / "Q4 FY25" does. The add branch has
+        // guarded against that collision from the start; this branch did not, so
+        // a stub carrying nothing but a company, a quarter and the word rejected
+        // removed a reviewed record belonging to someone else — and exited 0.
+        //
+        // The occupant's own company name is the identity that matters, not the
+        // filename it happens to live under.
+        let occupant;
+        try {
+          occupant = JSON.parse(await readFile(path, 'utf8'));
+        } catch (err) {
+          result.failed.push({ record, path, error: `cannot read the archived record to check it — ${err.message}` });
+          continue;
+        }
+        if (String(occupant.company || '') !== String(record.company || '')) {
+          result.collisions.push({ record, path, occupant: occupant.company || '(unnamed)', action: 'remove' });
+          continue;
+        }
+        await rm(path);
+        result.removed.push({ record, path });
+        continue;
+      }
+
+      const reason = archiveRejectionReason(record);
+      if (reason) {
+        result.skipped.push({ record, reason });
+        continue;
+      }
+
       if (existsSync(path)) {
         const existing = JSON.parse(await readFile(path, 'utf8'));
         // Two different companies resolving to one filename must never end with one
@@ -264,7 +320,8 @@ export async function addToArchive(records, dir, { force = false } = {}) {
       result.added.push({ record, path });
     } catch (err) {
       // One unwritable filename used to abort the loop, so approved records after it were
-      // never archived and no summary was printed at all.
+      // never archived and no summary was printed at all. The same is now true of a
+      // record that throws while being checked rather than while being written.
       result.failed.push({ record, path, error: err.message });
     }
   }
@@ -378,9 +435,10 @@ async function main(argv) {
   }
   if (result.collisions.length) {
     lines.push('');
-    lines.push(`  ${result.collisions.length} name collision${result.collisions.length === 1 ? '' : 's'} — nothing was overwritten:`);
-    for (const { record, path, occupant } of result.collisions) {
-      lines.push(`    ! ${record.company} would land on ${path.replace(`${REPO_ROOT}/`, '')}, which holds ${occupant}`);
+    lines.push(`  ${result.collisions.length} name collision${result.collisions.length === 1 ? '' : 's'} — nothing was overwritten or deleted:`);
+    for (const { record, path, occupant, action } of result.collisions) {
+      const verb = action === 'remove' ? 'would delete' : 'would land on';
+      lines.push(`    ! ${record.company} ${verb} ${path.replace(`${REPO_ROOT}/`, '')}, which holds ${occupant}`);
     }
     lines.push('    Give one of them a distinguishable name in pipeline/config/companies.mjs.');
   }

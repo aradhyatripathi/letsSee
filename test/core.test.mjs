@@ -562,12 +562,28 @@ test('a rejected record never reaches the Q&A model', () => {
 
 /* ------------------------------- quote verification, second review pass -- */
 
+// These check the value matcher, so the sentence under test has to sit inside a
+// document rather than being one: a quote that is most of its own source is
+// refused before the value is ever looked at, and a test written that way would
+// pass for the wrong reason.
+const filing = (sentence) => [
+  'APOLLO TYRES LIMITED',
+  'Unaudited financial results for the quarter ended 30 June 2025',
+  'Statement of profit and loss (Rs. crore)',
+  '',
+  sentence,
+  '',
+  'Segment information, related party disclosures and the notes to the accounts',
+  'follow in the annexure filed with the exchanges under Regulation 33 of the SEBI',
+  '(Listing Obligations and Disclosure Requirements) Regulations, 2015.'
+].join('\n');
+
 // Indian filings write a loss in the accounting convention. Before this was
 // handled, a correctly-quoted loss failed the value check and the extract path
 // discarded the whole record — every other figure on that filing with it.
 test('a loss quoted in the accounting convention verifies', () => {
-  const source = 'Profit/(loss) after tax for the quarter was Rs. (1,234.50) crore.';
   const quote = 'Profit/(loss) after tax for the quarter was Rs. (1,234.50) crore';
+  const source = filing(quote + '.');
 
   assert.equal(
     TyreCore.verifyQuotes({ core: { pat: -1234.5 }, quotes: { pat: quote } }, source).checks[0].status,
@@ -583,23 +599,111 @@ test('a loss quoted in the accounting convention verifies', () => {
 // A period label is how a filing names the column, not the figure in it. Left as
 // a candidate number, "FY26" would support a fabricated ROCE of 26.
 test('a period label cannot stand in for the figure it labels', () => {
-  const source = 'Total income for Q1 FY26 stood at 6,543.21 for the quarter ended 30 June 2025.';
+  const quote = 'Total income for Q1 FY26 stood at 6,543.21 for the quarter ended 30 June 2025.';
+  const source = filing(quote);
   const check = (value) =>
-    TyreCore.verifyQuotes({ core: { roce: value } , quotes: { roce: source } }, source).checks[0].status;
+    TyreCore.verifyQuotes({ core: { roce: value } , quotes: { roce: quote } }, source).checks[0];
 
-  assert.notEqual(check(26), 'verified', 'FY26 is not a ROCE of 26');
-  assert.notEqual(check(1), 'verified', 'Q1 is not a value of 1');
-  assert.notEqual(check(30), 'verified', 'the day of a date is not a value of 30');
+  // Each must fail on the value, not on the quote's size — otherwise this test
+  // would keep passing with the period-label scrubbing removed.
+  for (const [value, why] of [[26, 'FY26 is not a ROCE of 26'], [1, 'Q1 is not a value of 1'], [30, 'the day of a date is not a value of 30']]) {
+    assert.equal(check(value).status, 'value_not_in_quote', why);
+  }
 
   // The figure the sentence actually states still verifies.
   assert.equal(
-    TyreCore.verifyQuotes({ core: { revenue: 6543.21 }, quotes: { revenue: source } }, source).checks[0].status,
+    TyreCore.verifyQuotes({ core: { revenue: 6543.21 }, quotes: { revenue: quote } }, source).checks[0].status,
     'verified'
   );
   // And a genuine four-digit figure is not mistaken for a year and scrubbed away.
   const yearish = 'Revenue from operations 2,025.00 crore';
   assert.equal(
-    TyreCore.verifyQuotes({ core: { revenue: 2025 }, quotes: { revenue: yearish } }, yearish).checks[0].status,
+    TyreCore.verifyQuotes({ core: { revenue: 2025 }, quotes: { revenue: yearish } }, filing(yearish)).checks[0].status,
     'verified'
   );
+});
+
+/* ------------------------------------------- a quote is a span, not a document -- */
+
+// The central claim of the whole pipeline is that a figure is backed by an exact
+// quote from the filing, checked rather than promised. That claim was vacuous for
+// an oversized quote: quoteMatchScore asks whether the quote appears in the
+// source, and a document appears in itself, so a record whose "quote" was the
+// filing scored a perfect 1 and every downstream signal repeated it — the
+// reviewer's green badge, the deck's "N of N verified" footnote, the workbook's
+// Verification column, the quote the Q&A model is told to cite.
+test('a figure quoting the whole filing is not verified by it', () => {
+  const source = [
+    'APOLLO TYRES LIMITED — Q1 FY26',
+    'Revenue from operations 6,500.00',
+    'Profit for the period 300.00',
+    'Headcount at quarter end: 4321 employees',
+    'Registered office: 6th Floor, Cherupushpam Building, Kochi 682011'
+  ].join('\n');
+
+  // The filing states a PAT of 300. This record claims 4321 — the headcount two
+  // lines down — and offers the document itself as the supporting quote.
+  const v = TyreCore.verifyQuotes({ core: { pat: 4321 }, quotes: { pat: source } }, source);
+
+  assert.equal(v.checks[0].status, 'quote_too_long');
+  assert.equal(v.checks[0].score, 0, 'and it is not scored as a match either');
+  assert.match(v.checks[0].detail, /% of the whole document/);
+  assert.equal(v.ok, false);
+  assert.equal(v.quote_too_long, 1);
+
+  // The line that actually reports the figure still verifies, which is the point:
+  // the rule refuses documents, not quotes.
+  assert.equal(
+    TyreCore.verifyQuotes({ core: { pat: 300 }, quotes: { pat: 'Profit for the period 300.00' } }, source).checks[0].status,
+    'verified'
+  );
+});
+
+// The archive already refused a record like this (MAX_STRING_CHARS), which is how
+// the hole was found: the guard existed, at the last gate rather than the first,
+// so everything the reviewer and the deck said before the archive was reached had
+// already vouched for it.
+test('an oversized quote fails verification long before the archive sees it', () => {
+  const source = 'Revenue from operations 6,500.00 crore. ' + 'The capacity expansion continues on schedule. '.repeat(2000);
+  // A near-copy rather than a verbatim slice, so the matcher cannot take its
+  // substring fast path. This is the shape that costs: the sliding-window scan
+  // finds hundreds of plausible windows and each is re-scored by LCS, which is
+  // quadratic in the quote's token count. Left unbounded, the same quote at
+  // 40,000 characters takes 51 seconds — in the dashboard that is the tab
+  // freezing mid-review, and the extract path then retries it.
+  const quote = source.slice(0, 8000).replace(/schedule/g, 'programme');
+
+  const started = process.hrtime.bigint();
+  const v = TyreCore.verifyQuotes({ core: { revenue: 6500 }, quotes: { revenue: quote } }, source);
+  const ms = Number(process.hrtime.bigint() - started) / 1e6;
+
+  assert.equal(v.checks[0].status, 'quote_too_long');
+  assert.equal(v.checks[0].detail.startsWith(quote.length + ' characters'), true, v.checks[0].detail);
+  assert.equal(v.ok, false);
+
+  // Cost is bounded by the rule, not by the input — which requires the size
+  // check to run before the matcher, not after it.
+  assert.ok(ms < 250, `verification took ${ms.toFixed(0)}ms — the size check is meant to run before the matcher`);
+});
+
+// Every half of the product has to agree, or the reviewer and the deck disagree
+// about the same record.
+test('an oversized quote is refused everywhere the record is presented', () => {
+  const source = 'Revenue from operations 6,500.00 crore. ' + 'Capacity expansion continues. '.repeat(200);
+  const rec = TyreCore.recToStoredShape({
+    company: 'Apollo Tyres', quarter: 'Q1 FY26',
+    currency: { code: 'INR', unit: 'Crore' },
+    core: { revenue: 6500 }, core_quotes: { revenue: source.slice(0, 3000) }
+  }, { source: 'apollo.pdf' });
+  rec.verification = TyreCore.verifyQuotes(rec, source);
+  rec.review = { status: 'approved', reviewer: 'P', reviewed_at: 'x', note: null };
+
+  const deck = TyreCore.buildDeckModel([rec], { quarter: 'Q1 FY26' });
+  const slide = deck.slides.find((sl) => sl.title === 'Apollo Tyres');
+  assert.match(slide.footnote, /^0 of 1 quotes verified/, 'the deck does not claim a verification that failed');
+
+  const wb = TyreCore.buildWorkbookModel([rec], {});
+  const quotesSheet = wb.sheets.find((sh) => /Sources/.test(sh.name));
+  const row = quotesSheet.aoa.slice(1).find((r) => r.includes('Revenue'));
+  assert.ok(row && !/^verified$/.test(String(row[row.length - 1])), 'the workbook does not call it verified');
 });

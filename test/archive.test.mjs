@@ -283,3 +283,93 @@ test('archiveRejectionReason is the single rule, and it says why', () => {
   assert.equal(archiveRejectionReason(record({ review: { status: 'pending' } })), 'pending');
   assert.match(archiveRejectionReason(record({ core: null })), /malformed/);
 });
+
+// A record that throws while being CHECKED used to escape the loop, and the loop is
+// where rejections take effect. So a file whose first record was poisoned and whose
+// second rejected an archived company left that company archived — and --export then
+// shipped it under a line saying every record in the file had been checked.
+//
+// Depth is the lever: V8 parses a 20,000-deep object without complaint and only
+// detonates when something walks it. The record is otherwise approved and valid.
+// Returned as text as well as an object, because JSON.stringify overflows on it too:
+// the asymmetry is the whole point — V8 parses this depth and dies walking it.
+function deeplyNested(depth) {
+  const raw = JSON.stringify(record({ company: 'Poison', id: 'poison' }));
+  const text = raw.slice(0, -1) + ',"notes":' + '{"a":'.repeat(depth) + '1' + '}'.repeat(depth) + '}';
+  return { text, value: JSON.parse(text) };
+}
+
+test('a record too deep to walk is refused, not thrown', () => {
+  const reason = archiveRejectionReason(deeplyNested(20000).value);
+  assert.match(reason, /nests more than \d+ levels deep/);
+
+  // And an ordinary record is still not "too deep" — the record shape is four levels.
+  assert.equal(archiveRejectionReason(record()), null);
+});
+
+test('a poisoned record does not stop the rejection that follows it', async (t) => {
+  const dir = await tempArchive(t);
+  await addToArchive([record({ company: 'Apollo Tyres', id: 'a' }), record({ company: 'CEAT', id: 'c' })], dir);
+  assert.equal((await readArchive(dir)).records.length, 2);
+
+  // The operator re-reviews, rejects CEAT, and re-runs with a file someone handed
+  // them whose first record is unwalkable.
+  const result = await addToArchive([
+    deeplyNested(20000).value,
+    record({ company: 'CEAT', id: 'c', review: { status: 'rejected', reviewer: 'P', reviewed_at: 'x', note: null } })
+  ], dir);
+
+  assert.equal(result.removed.length, 1, 'the rejection took effect');
+  assert.equal(result.skipped.length + result.failed.length, 1, 'and the poisoned record was reported, not swallowed');
+
+  const { records } = await readArchive(dir);
+  assert.deepEqual(records.map((r) => r.company), ['Apollo Tyres'], 'the rejected record is out of the archive');
+});
+
+test('one unreadable file in the archive does not brick --list and --export', async (t) => {
+  const dir = await tempArchive(t);
+  await addToArchive([record({ company: 'Apollo Tyres', id: 'a' })], dir);
+  await mkdir(join(dir, 'q1-fy26'), { recursive: true });
+  await writeFile(join(dir, 'q1-fy26', 'poisoned.json'), deeplyNested(20000).text, 'utf8');
+
+  const { records, problems } = await readArchive(dir);
+  assert.deepEqual(records.map((r) => r.company), ['Apollo Tyres'], 'the good records still come back');
+  assert.equal(problems.length, 1, 'and the bad file is reported as a problem');
+  assert.match(problems[0].reason, /nests more than|could not be checked/);
+});
+
+// The add branch has always refused to let two companies that slug to one filename
+// overwrite each other. The remove branch did not, and a removal is a deletion: a
+// stub carrying nothing but a company, a quarter and the word "rejected" took a
+// reviewed record belonging to someone else out of the archive, and exited 0.
+test('a rejection cannot delete a record belonging to another company', async (t) => {
+  const dir = await tempArchive(t);
+  await addToArchive([record({ company: 'Apollo Tyres', id: 'a' })], dir);
+
+  // Slugs to exactly the same path as Apollo Tyres / Q1 FY26.
+  const result = await addToArchive([{
+    company: 'APOLLO   TYRES!!', quarter: 'q1  fy26', review: { status: 'Rejected' }
+  }], dir);
+
+  assert.equal(result.removed.length, 0, 'nothing was deleted');
+  assert.equal(result.collisions.length, 1);
+  assert.equal(result.collisions[0].occupant, 'Apollo Tyres');
+  assert.equal(result.collisions[0].action, 'remove');
+
+  const { records } = await readArchive(dir);
+  assert.deepEqual(records.map((r) => r.company), ['Apollo Tyres'], 'the record is still there');
+});
+
+// And the ordinary case still works: rejecting the record that is actually archived
+// takes it out. Without this the test above would pass with removals disabled.
+test('a rejection still removes that company\'s own archived record', async (t) => {
+  const dir = await tempArchive(t);
+  await addToArchive([record({ company: 'Apollo Tyres', id: 'a' })], dir);
+
+  const result = await addToArchive([
+    record({ company: 'Apollo Tyres', id: 'a', review: { status: 'rejected', reviewer: 'P', reviewed_at: 'x', note: null } })
+  ], dir);
+
+  assert.equal(result.removed.length, 1);
+  assert.deepEqual((await readArchive(dir)).records, []);
+});

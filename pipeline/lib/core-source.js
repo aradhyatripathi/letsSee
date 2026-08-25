@@ -452,6 +452,54 @@ function quoteContainsValue(quote, value) {
 
 var QUOTE_MATCH_THRESHOLD = 0.85;
 
+// A quote is a span, not a document.
+//
+// Without this bound the central safety property is vacuous. quoteMatchScore's
+// fast path asks whether the normalized quote appears in the normalized source,
+// and a document is trivially a substring of itself — so a record whose "quote"
+// for PAT is the whole filing scores 1 and is marked verified, and
+// quoteContainsValue then only has to find the figure somewhere in those
+// thousands of characters. A filing stating PAT of 300 crore will happily
+// "verify" a reported PAT of 4321 because 4321 is the headcount two lines down.
+//
+// pipeline/archive.mjs already knew this and refused such a record at the
+// archive (MAX_STRING_CHARS). That was the wrong place: everything between
+// extraction and the archive — the reviewer's green badge, the deck's "N of N
+// quotes verified" footnote, the workbook's Verification column, the quote the
+// Q&A model is told to cite — had already repeated the claim.
+//
+// 400 characters: the quotes the offline extractor produces from the fixtures
+// run 22-84 characters (median 66), and a P&L caption with three comparative
+// columns and a long line label is comfortably under 200. Anything past 400 is
+// not a citation of a figure, whatever else it may be.
+var MAX_QUOTE_CHARS = 400;
+
+// The absolute cap is not the whole rule, because it is only a citation relative
+// to the thing cited. A 199-character "filing" quoted in full is 199 characters —
+// inside the cap, and still evidence of nothing: the figure is "in the quote"
+// only in the sense that it is somewhere in the document.
+//
+// Half is deliberately loose. A real quote is a line out of a filing, so it runs
+// a few percent of the source at most; the fixtures come to 1-2%. The bound is
+// set where no honest quote can reach it, so that it only ever fires on a quote
+// that is standing in for the document.
+var MAX_QUOTE_SOURCE_SHARE = 0.5;
+
+// Is this a citation of a line, or a stand-in for the document? Returns the
+// reason it is not a citation, or '' when it is one — phrased for the reviewer,
+// because they are the person who has to act on it.
+function oversizeReason(quote, sourceText) {
+  var len = quote.length;
+  if (len > MAX_QUOTE_CHARS) {
+    return len + ' characters — a section of the filing, not the line reporting the figure (the limit is ' + MAX_QUOTE_CHARS + ')';
+  }
+  var sourceLen = String(sourceText == null ? '' : sourceText).length;
+  if (sourceLen && len > sourceLen * MAX_QUOTE_SOURCE_SHARE) {
+    return 'the quote is ' + Math.round((len / sourceLen) * 100) + '% of the whole document, so it points at no particular figure in it';
+  }
+  return '';
+}
+
 // Section 4 / Stage 2: this is the actual enforcement of "never fabricate a
 // quote". Every non-empty quote must be traceable back to the retrieved source
 // text; a number reported without a quote is flagged rather than silently kept.
@@ -478,13 +526,26 @@ function verifyQuotes(rec, sourceText, opts) {
       continue;
     }
 
-    var score = quoteMatchScore(sourceText, quote);
+    // Size is checked before matching, not after: an oversized quote is not a
+    // low-scoring quote, it is a quote that would score 1 for the wrong reason.
+    // Checking first also keeps the matcher's cost bounded by MAX_QUOTE_CHARS
+    // rather than by whatever length a filing hands us.
     var status;
-    if (score < threshold) status = 'not_found';
-    else if (hasValue && !quoteContainsValue(quote, value)) status = 'value_not_in_quote';
-    else status = 'verified';
+    var score;
+    var detail = oversizeReason(quote, sourceText);
+    if (detail) {
+      status = 'quote_too_long';
+      score = 0;
+    } else {
+      score = quoteMatchScore(sourceText, quote);
+      if (score < threshold) status = 'not_found';
+      else if (hasValue && !quoteContainsValue(quote, value)) status = 'value_not_in_quote';
+      else status = 'verified';
+    }
     if (status !== 'verified') failed++;
-    checks.push({ key: k, value: hasValue ? value : null, quote: quote, score: Math.round(score * 1000) / 1000, status: status });
+    var check = { key: k, value: hasValue ? value : null, quote: quote, score: Math.round(score * 1000) / 1000, status: status };
+    if (detail) check.detail = detail;
+    checks.push(check);
   }
 
   return {
@@ -500,6 +561,7 @@ function verifyQuotes(rec, sourceText, opts) {
     failed: failed,
     not_found: checks.filter(function (c) { return c.status === 'not_found'; }).length,
     value_not_in_quote: checks.filter(function (c) { return c.status === 'value_not_in_quote'; }).length,
+    quote_too_long: checks.filter(function (c) { return c.status === 'quote_too_long'; }).length,
     unquoted: unquoted,
     checks: checks
   };
@@ -585,8 +647,10 @@ var EXTRACTION_SYSTEM = [
   '',
   'Rules, in order of importance:',
   '1. Never fabricate a quote. Every value in core_quotes must be a short span copied',
-  '   character-for-character from the source text. If you cannot copy an exact span',
-  '   supporting a figure, return "" for that quote and null for that figure.',
+  '   character-for-character from the source text — the line that reports the figure,',
+  '   at most ' + MAX_QUOTE_CHARS + ' characters. A longer span is rejected: quoting a whole section',
+  '   proves nothing about which number in it you meant. If you cannot copy an exact',
+  '   span supporting a figure, return "" for that quote and null for that figure.',
   '2. Never estimate, derive, annualize, or infer a number. If the filing does not state',
   '   it, the value is null. A margin you computed yourself is not a reported margin.',
   '3. Detect currency and unit explicitly from the source (e.g. "INR"/"Crore",',
@@ -1025,7 +1089,7 @@ function buildDeckModel(records, opts) {
   var pending = rows.filter(function (r) { return reviewStatus(r) === 'pending'; });
   var reviewers = uniqueStrings(approved.map(function (r) { return r.review && r.review.reviewer; }));
 
-  var tally = { verified: 0, not_found: 0, value_not_in_quote: 0, unquoted: 0, checked: 0 };
+  var tally = { verified: 0, not_found: 0, value_not_in_quote: 0, quote_too_long: 0, unquoted: 0, checked: 0 };
   rows.forEach(function (r) {
     var v = r.verification;
     if (!v) return;
@@ -1035,6 +1099,7 @@ function buildDeckModel(records, opts) {
     (v.checks || []).forEach(function (c) {
       if (c.status === 'not_found') tally.not_found++;
       if (c.status === 'value_not_in_quote') tally.value_not_in_quote++;
+      if (c.status === 'quote_too_long') tally.quote_too_long++;
     });
   });
 
@@ -1411,6 +1476,7 @@ var TyreCore = {
   OUTLOOK_KEYS: OUTLOOK_KEYS,
   FX_TO_INR: FX_TO_INR,
   QUOTE_MATCH_THRESHOLD: QUOTE_MATCH_THRESHOLD,
+  MAX_QUOTE_CHARS: MAX_QUOTE_CHARS,
   SOURCE_CHAR_BUDGET: SOURCE_CHAR_BUDGET,
   EXTRACTION_SYSTEM: EXTRACTION_SYSTEM,
   QA_SYSTEM: QA_SYSTEM,
