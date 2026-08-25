@@ -438,7 +438,12 @@ function verifyQuotes(rec, sourceText, opts) {
   }
 
   return {
-    ok: failed === 0,
+    // A figure reported with no quote at all is a failure, not a note in the margin.
+    // The prompt's own rule is that a figure you cannot quote is returned as null, so an
+    // unquoted figure is the model breaking that rule — and counting it as acceptable
+    // meant a record of twenty-one fabricated numbers with no quotes anywhere reported
+    // ok: true and was stored.
+    ok: failed === 0 && unquoted === 0,
     threshold: threshold,
     checked: checks.length,
     verified: checks.filter(function (c) { return c.status === 'verified'; }).length,
@@ -667,17 +672,25 @@ function buildQAPrompt(records, question, opts) {
 
 // Models occasionally wrap JSON in a fence or add a sentence around it despite
 // instructions. Recover the object rather than failing the whole extraction.
-function parseModelJSON(text) {
-  var s = String(text == null ? '' : text).trim();
-  var fence = /```(?:json)?\s*([\s\S]*?)```/i.exec(s);
-  if (fence) s = fence[1].trim();
-  try { return JSON.parse(s); } catch (e) { /* fall through to brace scan */ }
+// Keys that make an object one of ours rather than some other JSON in the text.
+var SCHEMA_KEYS = ['company', 'quarter', 'currency', 'core', 'core_quotes', 'quotes', 'segments', 'outlook'];
 
-  var start = s.indexOf('{');
-  if (start === -1) throw new Error('no JSON object found in model output');
-  var depth = 0, inStr = false, esc = false;
-  for (var i = start; i < s.length; i++) {
-    var ch = s[i];
+function looksLikeRecord(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  for (var i = 0; i < SCHEMA_KEYS.length; i++) {
+    if (Object.prototype.hasOwnProperty.call(value, SCHEMA_KEYS[i])) return true;
+  }
+  return false;
+}
+
+// Every balanced region in the text for one bracket pair, as { at, text }, outermost
+// only, ignoring brackets inside strings. `unterminated` says an opener never closed,
+// which is worth telling the operator apart from "there was no JSON here at all".
+function balancedRegions(s, open, close) {
+  var out = [];
+  var depth = 0, start = -1, inStr = false, esc = false, unterminated = false;
+  for (var i = 0; i < s.length; i++) {
+    var ch = s.charAt(i);
     if (inStr) {
       if (esc) esc = false;
       else if (ch === '\\') esc = true;
@@ -685,13 +698,71 @@ function parseModelJSON(text) {
       continue;
     }
     if (ch === '"') inStr = true;
-    else if (ch === '{') depth++;
-    else if (ch === '}') {
+    else if (ch === open) { if (depth === 0) start = i; depth++; }
+    else if (ch === close) {
       depth--;
-      if (depth === 0) return JSON.parse(s.slice(start, i + 1));
+      if (depth === 0 && start !== -1) { out.push({ at: start, text: s.slice(start, i + 1) }); start = -1; }
+      if (depth < 0) depth = 0;
     }
   }
-  throw new Error('unterminated JSON object in model output');
+  if (depth > 0) unterminated = true;
+  out.unterminated = unterminated;
+  return out;
+}
+
+/**
+ * Recover the record object from a model's answer.
+ *
+ * The answer may arrive as a bare object, inside a fence, or — on the hand-carried
+ * route — pasted out of a whole chat, where the model may have answered once and then
+ * corrected itself. Taking the first object found meant the superseded draft won and the
+ * correction was silently discarded, so candidates are tried from the END of the text
+ * backwards: the last thing the model said is what the person meant to hand over.
+ */
+function parseModelJSON(text) {
+  var s = String(text == null ? '' : text);
+  var candidates = [];
+
+  var fence = /```(?:json)?\s*([\s\S]*?)```/gi;
+  var m;
+  while ((m = fence.exec(s)) !== null) candidates.push({ at: m.index, text: m[1].trim() });
+  var objects = balancedRegions(s, '{', '}');
+  objects.forEach(function (r) { candidates.push(r); });
+  candidates.push({ at: -1, text: s.trim() });
+
+  // An array of records is refused before anything else. The object scan would otherwise
+  // reach inside one and return whichever element it happened to land on — quietly
+  // picking one filing out of several is worse than refusing to pick.
+  var arrays = balancedRegions(s, '[', ']');
+  for (var a = 0; a < arrays.length; a++) {
+    var whole;
+    try { whole = JSON.parse(arrays[a].text); } catch (e) { continue; }
+    if (Array.isArray(whole) && whole.some(looksLikeRecord)) {
+      throw new Error(
+        'the answer is a JSON array of ' + whole.length + ' object(s); this schema is one object ' +
+        'per filing, so send the object for this company on its own'
+      );
+    }
+  }
+
+  candidates.sort(function (a, b) { return b.at - a.at; });
+
+  var sawObject = false;
+  for (var i = 0; i < candidates.length; i++) {
+    var parsed;
+    try { parsed = JSON.parse(candidates[i].text); } catch (e) { continue; }
+    if (Array.isArray(parsed)) continue;
+    if (looksLikeRecord(parsed)) return parsed;
+    if (parsed && typeof parsed === 'object') sawObject = true;
+  }
+
+  if (sawObject) {
+    throw new Error('found JSON, but no object carrying the schema (expected company/quarter/core/core_quotes)');
+  }
+  if (objects.unterminated) {
+    throw new Error('unterminated JSON object in model output — the answer looks cut off');
+  }
+  throw new Error('no JSON object found in model output');
 }
 
 /* --------------------------------------------------------------- workbook -- */

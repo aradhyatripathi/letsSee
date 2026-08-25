@@ -18,7 +18,7 @@ import { COMPANIES, QUARTER_DEFAULT, findCompany, selectCompanies } from './conf
 import { TyreCore } from './lib/core.mjs';
 import { extractRecord, extractRecordFromResponse, extractRecordOffline } from './lib/extract.mjs';
 import { retrieveFiling } from './lib/retrieve.mjs';
-import { countFinancialMarkers, summarizeForConsole, writeRunReport } from './lib/report.mjs';
+import { countFinancialMarkers, countNumbers, summarizeForConsole, writeRunReport } from './lib/report.mjs';
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const DEFAULT_MODEL = 'claude-sonnet-4-6';
@@ -213,6 +213,12 @@ function parsePerCompanyPaths(specs, flagName, companies) {
     if (!companies.some((c) => c.id === company.id)) {
       throw new Error(`--${flagName} names ${company.name}, which is not in --companies — add it or drop the ${flagName}`);
     }
+    if (out.has(company.id)) {
+      throw new Error(
+        `--${flagName} was given twice for ${company.name} (${out.get(company.id)} and ${expandHome(path)}). ` +
+        'Only one can be used, and silently picking one would be worse than saying so.'
+      );
+    }
     out.set(company.id, expandHome(path));
   }
   return out;
@@ -262,7 +268,8 @@ async function processCompany(company, opts, runDir) {
     attempts: retrieval.attempts || [],
     // Counted here, where the text is, so the report can tell a filing apart from
     // a cookie wall that returned 200 without carrying the whole document around.
-    financial_markers: retrieval.ok ? countFinancialMarkers(retrieval.text) : null
+    financial_markers: retrieval.ok ? countFinancialMarkers(retrieval.text) : null,
+    number_count: retrieval.ok ? countNumbers(retrieval.text) : null
   };
 
   if (!retrieval.ok) {

@@ -154,15 +154,15 @@ export async function extractRecord({
         return result;
       }
 
-      const unfound = verification.checks.filter((c) => c.status === 'not_found');
-      attempt.error = `quotes not found in the source: ${unfound.map((c) => c.key).join(', ')}`;
-      correction = buildCorrection(unfound, verification.threshold);
+      const unverified = verification.checks.filter((c) => c.status !== 'verified');
+      attempt.error = describeChecks(unverified);
+      correction = buildCorrection(unverified, verification.threshold);
     }
 
-    const failing = result.verification.checks.filter((c) => c.status === 'not_found').map((c) => c.key);
+    const unverified = result.verification.checks.filter((c) => c.status !== 'verified');
     result.error =
       `${who}: quote verification failed after ${totalAttempts} attempt${totalAttempts === 1 ? '' : 's'} — ` +
-      `no source span could be found for ${failing.join(', ')}. The record is attached unaccepted; ` +
+      `${describeChecks(unverified)}. The record is attached unaccepted; ` +
       're-run this company, or extract it by hand.';
     return result;
   } catch (err) {
@@ -246,8 +246,8 @@ export function extractRecordOffline({ sourceText, company, quarter, source = nu
     });
 
     if (!verification.ok) {
-      const failing = verification.checks.filter((c) => c.status === 'not_found').map((c) => c.key);
-      result.error = `${who}: offline quote verification failed for ${failing.join(', ')} — the extraction patterns are matching text that is not in the filing`;
+      const unverified = verification.checks.filter((c) => c.status !== 'verified');
+      result.error = `${who}: offline quote verification failed — ${describeChecks(unverified)}. The extraction patterns are matching text that is not in the filing`;
       return result;
     }
 
@@ -332,6 +332,19 @@ export function extractRecordFromResponse({
       return result;
     }
 
+    // Carrying answers by hand means answers get carried to the wrong place. Pasting
+    // MRF's answer into an Apollo run used to store an MRF record whose quotes had been
+    // verified against Apollo's filing, and every count in the run report agreed with
+    // itself. The prompt does invite the model to correct the company and quarter it was
+    // given, so the comparison is loose — it catches a different filing, not a tidier
+    // spelling of the same one.
+    const mismatch = describeMismatch(parsed, company, quarter);
+    if (mismatch) {
+      result.attempts.push({ n: 1, extractor, origin, ok: false, verification: null, error: mismatch });
+      result.error = `${who}: ${mismatch}`;
+      return result;
+    }
+
     const { record, problems, verification } = toVerifiedRecord({
       parsed,
       sourceText: text,
@@ -358,13 +371,12 @@ export function extractRecordFromResponse({
     });
 
     if (!verification.ok) {
-      const failing = verification.checks
-        .filter((c) => c.status !== 'verified' && c.status !== 'unquoted')
-        .map((c) => `${c.key} (${c.status})`);
+      const unverified = verification.checks.filter((c) => c.status !== 'verified');
       result.error =
-        `${who}: quote verification failed for ${failing.join(', ')}. ` +
-        'The record is attached unaccepted. Re-ask with the correction text the report prints, ' +
-        'or check the filing text pasted into the chat is the same one named by --file.';
+        `${who}: ${describeChecks(unverified)}. The record is attached unaccepted.\n` +
+        `${buildCorrection(unverified, verification.threshold)}\n` +
+        'Paste that correction back into the same chat, save the new answer, and re-run. ' +
+        'If it repeats, check the filing text in the chat is the one named by --file.';
       return result;
     }
 
@@ -400,6 +412,49 @@ function summarise(verification) {
   };
 }
 
+// One sentence naming which fields failed and why, grouped by cause. "quotes not found
+// in the source" was printed for every kind of failure, including a quote that is in the
+// filing word for word but does not contain the figure it was offered for — which sent
+// the reader looking for the wrong problem.
+const CHECK_LABELS = {
+  not_found: 'no matching span in the filing',
+  value_not_in_quote: 'the quote is in the filing but does not contain the figure',
+  unquoted: 'a figure was reported with no quote at all'
+};
+
+function describeChecks(checks) {
+  const byStatus = new Map();
+  for (const c of checks) {
+    if (!byStatus.has(c.status)) byStatus.set(c.status, []);
+    byStatus.get(c.status).push(c.key);
+  }
+  if (!byStatus.size) return 'quote verification failed with nothing recorded';
+  return [...byStatus.entries()]
+    .map(([status, keys]) => `${keys.join(', ')} — ${CHECK_LABELS[status] || status}`)
+    .join('; ');
+}
+
+/** Loose comparison: a tidier spelling is fine, a different filing is not. */
+function looseMatch(a, b) {
+  const norm = (v) => String(v == null ? '' : v).toLowerCase().replace(/[^a-z0-9]/g, '');
+  const x = norm(a);
+  const y = norm(b);
+  if (!x || !y) return true;
+  return x === y || x.includes(y) || y.includes(x);
+}
+
+function describeMismatch(parsed, company, quarter) {
+  const reasons = [];
+  if (!looseMatch(parsed.company, company)) {
+    reasons.push(`the answer is for ${JSON.stringify(parsed.company)}, not ${JSON.stringify(company)}`);
+  }
+  if (quarter && parsed.quarter && !looseMatch(parsed.quarter, quarter)) {
+    reasons.push(`it reports ${JSON.stringify(parsed.quarter)}, not ${JSON.stringify(quarter)}`);
+  }
+  if (!reasons.length) return null;
+  return `${reasons.join(' and ')} — its quotes would have been checked against a different filing, so it was not stored`;
+}
+
 function describe(company, quarter) {
   return [company, quarter].filter(Boolean).join(' ') || 'unknown filing';
 }
@@ -407,14 +462,21 @@ function describe(company, quarter) {
 // Re-sent as an appendix to the original prompt rather than as a second turn:
 // these models reject an assistant prefill, and a stateless re-ask keeps the
 // source text and the schema in front of the model alongside the correction.
-function buildCorrection(unfound, threshold) {
-  const lines = unfound.map(
-    (c) => `  - ${c.key}: ${JSON.stringify(c.quote)} — matched only ${Math.round(c.score * 100)}% of the source wording`
-  );
+function buildCorrection(problems, threshold) {
+  const lines = problems.map((c) => {
+    if (c.status === 'unquoted') {
+      return `  - ${c.key}: reported as ${c.value} with no quote at all`;
+    }
+    if (c.status === 'value_not_in_quote') {
+      return `  - ${c.key}: reported as ${c.value}, but ${JSON.stringify(c.quote)} does not contain that figure` +
+        ' (this is usually the wrong comparative column)';
+    }
+    return `  - ${c.key}: ${JSON.stringify(c.quote)} — matched only ${Math.round(c.score * 100)}% of the source wording`;
+  });
   return [
     'CORRECTION — your previous answer was rejected before it was stored.',
     '',
-    `Every quote is checked against the filing text above; these did not reach the ${Math.round(threshold * 100)}% match required:`,
+    `Every figure must carry a quote that is in the filing text above and that contains the figure itself; these did not (match threshold ${Math.round(threshold * 100)}%):`,
     ...lines,
     '',
     'Re-extract the whole object. For each field listed, either copy an exact span from',

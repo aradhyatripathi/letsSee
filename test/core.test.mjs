@@ -195,7 +195,7 @@ test('verifyQuotes rejects a quote whose words are scattered across the document
   );
 });
 
-test('verifyQuotes counts a reported number with an empty quote as unquoted', () => {
+test('a reported number with no quote is unquoted, and that fails the record', () => {
   const rec = stored({ core: { revenue: 6338.42 }, core_quotes: { revenue: '' } });
 
   const result = TyreCore.verifyQuotes(rec, SOURCE);
@@ -203,11 +203,24 @@ test('verifyQuotes counts a reported number with an empty quote as unquoted', ()
   assert.equal(result.checked, 1);
   assert.equal(result.unquoted, 1);
   assert.equal(result.verified, 0);
-  assert.equal(result.failed, 0);
+  assert.equal(result.failed, 0, 'unquoted is its own count, not a fabricated quote');
   assert.deepEqual(result.checks[0], { key: 'revenue', value: 6338.42, quote: '', score: 0, status: 'unquoted' });
-  // A missing quote is not a fabricated quote: it is surfaced for the reviewer
-  // rather than failing the extraction outright.
-  assert.equal(result.ok, true);
+
+  // This used to be `ok: true`, on the reasoning that a missing quote is not a fabricated
+  // one and should be surfaced rather than fail the extraction. The reasoning was wrong,
+  // and the hole it left was total: a record of twenty-one invented numbers with no
+  // quotes at all reported ok and was stored. The prompt's own rule is that a figure you
+  // cannot quote is returned as null, so an unquoted figure is the model breaking it.
+  assert.equal(result.ok, false);
+});
+
+test('a record with no quotes at all cannot pass the gate', () => {
+  const core = Object.fromEntries(TyreCore.CORE_KEYS.map((k, i) => [k, 1000 + i]));
+  const result = TyreCore.verifyQuotes(stored({ core, core_quotes: {} }), SOURCE);
+  assert.equal(result.checked, TyreCore.CORE_KEYS.length);
+  assert.equal(result.verified, 0);
+  assert.equal(result.unquoted, TyreCore.CORE_KEYS.length);
+  assert.equal(result.ok, false, 'twenty-one unsupported figures is the worst case, not the permitted one');
 });
 
 test('verifyQuotes verifies vacuously when there are no values and no quotes', () => {
@@ -387,6 +400,39 @@ test('parseModelJSON throws a clear error on genuinely unparseable output', () =
   assert.throws(() => TyreCore.parseModelJSON('I am not able to help with that request.'), /no JSON object found/);
   assert.throws(() => TyreCore.parseModelJSON(''), /no JSON object found/);
   assert.throws(() => TyreCore.parseModelJSON('{"core": {"revenue": 6338.42'), /unterminated JSON object/);
+});
+
+test('the last answer in a chat wins, because that is the one the model meant', () => {
+  // The hand-carried route asks a person to paste out of a chat, and a model that
+  // corrects itself leaves two objects in the text. Taking the first stored the draft
+  // the model had explicitly retracted.
+  const transcript = [
+    'Here is the extraction:',
+    '```json',
+    '{"company":"Apollo Tyres","core":{"revenue":6122.18}}',
+    '```',
+    'Apologies — that was the prior-quarter comparative column. Corrected:',
+    '```json',
+    '{"company":"Apollo Tyres","core":{"revenue":6338.42}}',
+    '```'
+  ].join('\n');
+  assert.equal(TyreCore.parseModelJSON(transcript).core.revenue, 6338.42);
+});
+
+test('an array of records is refused rather than one of them being picked', () => {
+  const many = '[{"company":"A","core":{}},{"company":"B","core":{}}]';
+  assert.throws(() => TyreCore.parseModelJSON(many), /array of 2/);
+  assert.throws(() => TyreCore.parseModelJSON(`Here you go: ${many}`), /array of 2/);
+  assert.throws(() => TyreCore.parseModelJSON('```json\n' + many + '\n```'), /array of 2/);
+});
+
+test('JSON that is not a record is not mistaken for one', () => {
+  assert.throws(() => TyreCore.parseModelJSON('{"status":"ok","count":3}'), /no object carrying the schema/);
+  // ...but a record following unrelated JSON is still found.
+  assert.equal(
+    TyreCore.parseModelJSON('{"status":"ok"}\n{"company":"A","core":{"revenue":9}}').core.revenue,
+    9
+  );
 });
 
 /* ------------------------------------------------------------ buildQAPrompt -- */

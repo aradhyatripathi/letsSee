@@ -60,7 +60,7 @@ export function buildRunReport(runResult) {
   out.push(...kvTable([
     ['Quarter', run.quarter],
     ['Retrieval mode', run.mode === 'live' ? 'live (network)' : 'fixture (offline)'],
-    ['Extractor', run.extractor === 'api' ? `Claude API — ${run.model}` : 'deterministic offline extractor (no API call)'],
+    ['Extractor', extractorLabel(run)],
     ['Started', run.started_at],
     ['Finished', run.generated_at],
     ['Duration', `${(run.duration_ms / 1000).toFixed(1)}s`],
@@ -239,7 +239,7 @@ export function summarizeForConsole(runResult) {
   const t = tally(run);
   const lines = [];
 
-  const engine = run.extractor === 'api' ? `Claude API (${run.model})` : 'offline deterministic extractor';
+  const engine = extractorLabel(run);
   lines.push(`Run ${run.run_id} — ${run.quarter} — ${run.mode} retrieval, ${engine}`);
   lines.push('');
   lines.push(`  ${t.ok.length} of ${t.total} companies produced a record`);
@@ -488,11 +488,31 @@ export function countFinancialMarkers(text) {
   return FINANCIAL_MARKERS.filter((re) => re.test(sample)).length;
 }
 
+/** How many numbers are in it. A filing is dense with them; a banner is not. */
+export function countNumbers(text) {
+  const found = String(text || '').match(/\d[\d,]*(?:\.\d+)?/g);
+  return found ? found.length : 0;
+}
+
+// Markers alone are not enough: a nav bar or a cookie banner can mention "cash flow" and
+// "balance sheet" and score well while containing no figures and barely any text. A
+// filing is long and full of numbers, so length and digits are part of the verdict.
+const MIN_FILING_CHARS = 3000;
+const MIN_FILING_NUMBERS = 20;
+
 function financialSignal(entry) {
   const r = entry.retrieval;
   if (!r || !r.ok) return { level: 'none', hits: 0, label: '—' };
   const hits = r.financial_markers;
   if (!Number.isFinite(hits)) return { level: 'unknown', hits: 0, label: 'not checked' };
+
+  const short = Number.isFinite(r.bytes) && r.bytes < MIN_FILING_CHARS;
+  const fewNumbers = Number.isFinite(r.number_count) && r.number_count < MIN_FILING_NUMBERS;
+  if (short || fewNumbers) {
+    const why = [short ? 'too short' : null, fewNumbers ? `only ${r.number_count} numbers in it` : null]
+      .filter(Boolean).join(', ');
+    return { level: 'none', hits, label: `**no — ${why}**` };
+  }
   if (hits === 0) return { level: 'none', hits, label: '**no — no financial wording found**' };
   if (hits <= 3) return { level: 'weak', hits, label: `thin (${hits} of ${FINANCIAL_MARKERS.length} markers)` };
   return { level: 'strong', hits, label: `yes (${hits} of ${FINANCIAL_MARKERS.length} markers)` };
@@ -507,6 +527,20 @@ function selectionNote(selection) {
     return `yes — ${Math.round((kept / total) * 100)}% of the document kept (${kept.toLocaleString('en-US')} of ${total.toLocaleString('en-US')} chars)`;
   }
   return 'yes';
+}
+
+// A run whose records were carried out of a chat by hand was described to the operator
+// as "deterministic offline extractor (no API call)" — which is a different provenance
+// entirely, and the one thing a reader of this report most needs to get right.
+function extractorLabel(run) {
+  switch (run.extractor) {
+    case 'api': return `Claude API — ${run.model}`;
+    case 'manual': return 'Claude, by hand — answers pasted back from a chat (--response)';
+    case 'offline': return 'deterministic offline extractor (no API call)';
+    case 'stopped-after-retrieval': return 'none — the run stopped after retrieval';
+    case 'stopped-after-prompt': return 'none — the run wrote the prompt and stopped';
+    default: return String(run.extractor || 'unknown');
+  }
 }
 
 /* ---------------------------------------------------------------- helpers -- */

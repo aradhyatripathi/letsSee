@@ -301,3 +301,118 @@ test('live mode without a key names the key-free routes instead of just refusing
   assert.match(stderr, /--emit-prompt/);
   assert.match(stderr, /--response=/);
 });
+
+/* ------------------------------------------ regressions from the review pass -- */
+
+test('an answer for the wrong company is refused, not verified against the wrong filing', async () => {
+  const sourceText = await readFile(fixturePath(SUBJECT), 'utf8');
+  const { answer } = await genuineAnswer();
+  answer.company = 'Some Other Tyre Company';
+
+  const result = extractRecordFromResponse({
+    sourceText,
+    responseText: JSON.stringify(answer),
+    company: 'Apollo Tyres',
+    quarter: 'Q1 FY26'
+  });
+
+  assert.equal(result.ok, false, 'carrying answers by hand means carrying them to the wrong place');
+  assert.match(result.error, /answer is for/);
+  assert.equal(result.record, null);
+});
+
+test('a tidier spelling of the same company is not a mismatch', async () => {
+  const sourceText = await readFile(fixturePath(SUBJECT), 'utf8');
+  const { answer } = await genuineAnswer();
+  answer.company = 'Apollo Tyres Limited';
+
+  const result = extractRecordFromResponse({
+    sourceText,
+    responseText: JSON.stringify(answer),
+    company: 'Apollo Tyres',
+    quarter: 'Q1 FY26'
+  });
+  assert.ok(result.ok, result.error || 'the prompt invites the model to correct the name it was given');
+});
+
+test('an answer for the wrong quarter is refused', async () => {
+  const sourceText = await readFile(fixturePath(SUBJECT), 'utf8');
+  const { answer } = await genuineAnswer();
+  answer.quarter = 'Q3 FY24';
+
+  const result = extractRecordFromResponse({
+    sourceText,
+    responseText: JSON.stringify(answer),
+    company: 'Apollo Tyres',
+    quarter: 'Q1 FY26'
+  });
+  assert.equal(result.ok, false);
+  assert.match(result.error, /Q3 FY24/);
+});
+
+test('a figure with no quote at all fails the carried route too', async () => {
+  const sourceText = await readFile(fixturePath(SUBJECT), 'utf8');
+  const { answer } = await genuineAnswer();
+  answer.core_quotes = {};   // twenty-one figures, no quotes anywhere
+
+  const result = extractRecordFromResponse({
+    sourceText,
+    responseText: JSON.stringify(answer),
+    company: 'Apollo Tyres',
+    quarter: 'Q1 FY26'
+  });
+  assert.equal(result.ok, false, 'unsupported figures must not be storable');
+  assert.match(result.error, /no quote at all/i);
+});
+
+test('the failure names the real reason, and carries the correction to send back', async () => {
+  const sourceText = await readFile(fixturePath(SUBJECT), 'utf8');
+  const { answer } = await genuineAnswer();
+  answer.core.revenue = Number(answer.core.revenue) + 1234.5;   // quote is real, figure is not
+
+  const result = extractRecordFromResponse({
+    sourceText,
+    responseText: JSON.stringify(answer),
+    company: 'Apollo Tyres',
+    quarter: 'Q1 FY26'
+  });
+  assert.equal(result.ok, false);
+  assert.match(result.error, /does not contain that figure/i,
+    '"quotes not found in the source" sent the reader looking for the wrong problem');
+  assert.match(result.error, /CORRECTION/, 'the correction text is in the error, not somewhere the report never printed');
+});
+
+test('the same company named twice on the command line is an error, not a silent pick', async (t) => {
+  const workDir = await mkdtemp(join(tmpdir(), 'tyre-dupe-'));
+  t.after(() => rm(workDir, { recursive: true, force: true }));
+
+  const dupe = await runCli([`--companies=${SUBJECT}`, `--response=${SUBJECT}:a.json`, `--response=${SUBJECT}:b.json`], workDir);
+  assert.equal(dupe.code, 1);
+  assert.match(dupe.stderr, /given twice/);
+
+  const dupeFile = await runCli([`--companies=${SUBJECT}`, `--file=${SUBJECT}:a.txt`, `--file=${SUBJECT}:b.txt`], workDir);
+  assert.equal(dupeFile.code, 1);
+  assert.match(dupeFile.stderr, /given twice/);
+});
+
+test('a carried run is not reported as the offline extractor', async (t) => {
+  const workDir = await mkdtemp(join(tmpdir(), 'tyre-label-'));
+  t.after(() => rm(workDir, { recursive: true, force: true }));
+
+  const { answer } = await genuineAnswer();
+  const answerPath = join(workDir, 'answer.json');
+  await writeFile(answerPath, JSON.stringify(answer), 'utf8');
+
+  const { code, stdout } = await runCli([
+    `--companies=${SUBJECT}`,
+    `--file=${SUBJECT}:${fixturePath(SUBJECT)}`,
+    `--response=${SUBJECT}:${answerPath}`,
+    '--out=records.json'
+  ], workDir);
+  assert.equal(code, 0);
+  assert.match(stdout, /by hand/, 'provenance is the thing a reader of this report most needs right');
+  assert.doesNotMatch(stdout, /deterministic offline extractor/);
+
+  const payload = JSON.parse(await readFile(join(workDir, 'records.json'), 'utf8'));
+  t.after(() => rm(join(REPO_ROOT, 'runs', payload.run_id), { recursive: true, force: true }));
+});
