@@ -3553,7 +3553,14 @@ $('export-excel-btn').addEventListener('click', () => {
 // .pptx is a ZIP of XML, and the renderer writes both.
 $('export-deck-btn').addEventListener('click', () => {
   const reviewedOnly = $('workbook-reviewed-only').checked;
-  const model = Core.buildDeckModel(records, { reviewedOnly, generatedAt: new Date().toISOString() });
+  let model;
+  try {
+    model = Core.buildDeckModel(records, { reviewedOnly, generatedAt: new Date().toISOString() });
+  } catch (err){
+    toast('Deck export failed');
+    alert('The deck could not be built from these records: ' + err.message);
+    return;
+  }
   if (!model.provenance.total){
     const rejected = records.filter(r => r.review && r.review.status === 'rejected').length;
     if (reviewedOnly && records.length > rejected){
