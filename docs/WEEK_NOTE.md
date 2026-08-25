@@ -226,6 +226,69 @@ rather than behaviour, the guard itself was checked by reintroducing the defect 
 confirming the suite goes red — the first two guards written for this did not, which is
 the same lesson one level up.
 
+## A fourth pass, and the thing the first three had in common
+
+A fourth review — six lenses this time (injection, trust elevation, paths and files,
+resource exhaustion, the browser, secrets and leakage), thirty agents, every finding
+handed to an independent skeptic told to refute it and demonstrated by running it — found
+twenty-four more. All twenty-four are fixed and each has a regression test, and each test
+was checked by reverting the fix and confirming it goes red.
+
+Three of them were the same defect in different clothes, and it is the one worth
+remembering.
+
+**A quote had no upper bound, so the central claim was vacuous.** The whole design rests
+on "a figure is backed by an exact quote from the filing, checked and not promised". The
+matcher asks whether the quote appears in the source; a document appears in itself. So a
+record whose quote for PAT was the entire filing scored a perfect 1.0 and was marked
+verified — and a fabricated figure equal to any number anywhere in the document (a
+headcount, a pin code, a prior-year column) came through with a green badge on the review
+card, a deck footnote saying "N of N quotes verified", a workbook column saying the same,
+and a quote the Q&A model was instructed to cite.
+
+The archive already knew a document is not a quote. It had refused exactly this record
+since the third pass, with a comment explaining why. It refused it at the last gate, after
+every screen and every artefact upstream had already vouched for it. A guard in the wrong
+place is not half a guard; for everything before it, it is no guard at all.
+
+**The reviewer's click landed on the wrong record.** Every review action resolved by
+looking an id up in the record list, which returns the first match, and ids come from
+imported files. Two records under one id sent the Approve click to the other one: the
+record the reviewer meant to approve stayed pending while a fabricated one was stamped
+approved by their own hand and went into the approved-only deck and workbook. A zero-width
+space in a company name made both cards and the confirmation toast read identically, so
+nothing on screen said what had happened.
+
+**An imported file ran script in the page.** The dashboard escaped what it believed were
+strings and concatenated what it believed were numbers, and a records file decides what a
+number is. A string in `currency.fx_to_inr` became markup. What that bought: a record the
+reviewer had *rejected* flipped to approved under a forged reviewer name, saved back to
+storage so it fired again on every load, and the API key the Settings tab promises is held
+in memory only sent to an attacker's URL.
+
+What the three have in common is that each was a place where a guarantee was checked
+somewhere but not everywhere, and the gap was invisible from inside the component that
+checked. The lesson from the third pass was "a guarantee stated but not enforced". The
+fourth pass sharpens it: **a guarantee enforced in one place is a guarantee that holds in
+one place.** The fixes reflect that — the quote bound moved into verification where the
+claim is made rather than staying at the archive; review actions address the record object
+rather than a name for it; types are forced where records enter rather than escaped where
+they are printed.
+
+Two smaller things worth recording because they change what the tool is like to use.
+Nothing bounded what a document we did not write could cost: a 200 MB response became
+7.2 GB of memory and a fatal abort that no `try/catch` can see, which loses every other
+company's work rather than the one page that caused it. And the dashboard sat blank for
+twelve and a half seconds on a machine that could not reach Google Fonts, because a
+stylesheet `@import` is render-blocking — on the locked-down laptop this is built for,
+which is the entire point of the offline design.
+
+Two of the guards written during this pass were themselves vacuous on the first attempt:
+the Content-Security-Policy test passed with the directive deleted because a broader one
+covered it, and the page-load test passed with the blocking import restored because the
+test refused the request instead of letting it hang. That is now the third round in which
+the first draft of a guard did not guard. It is worth assuming as a default.
+
 ## What was added afterwards, and why none of it crossed a line
 
 Three things the scoping note asks for turned out to be non-goals in the spec rather than
