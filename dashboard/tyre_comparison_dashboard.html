@@ -4302,7 +4302,17 @@ $('export-csv-btn').addEventListener('click', () => {
   const rows = exportRows();
   if (!rows.length){ toast('No records to export'); return; }
   const headers = Object.keys(rows[0]);
-  const csvEscape = (v) => { const s = (v===null||v===undefined) ? '' : String(v); return /[",\n]/.test(s) ? '"' + s.replace(/"/g,'""') + '"' : s; };
+  // A CSV cell beginning = + - @ or a control character is a formula to Excel and to
+  // LibreOffice, not text. This file is meant to be handed to a colleague, so the
+  // person who opens it is not the person who chose what went into it: a company name
+  // taken from an imported file, or from a filing via the extractor, arrived as a live
+  // formula and the recipient got the prompt. A leading apostrophe is the convention
+  // both readers understand for "this is text"; the quoting is unchanged.
+  const csvEscape = (v) => {
+    let s = (v===null||v===undefined) ? '' : String(v);
+    if (/^[=+\-@\t\r]/.test(s)) s = "'" + s;
+    return /[",\n]/.test(s) ? '"' + s.replace(/"/g,'""') + '"' : s;
+  };
   const csv = [headers.join(',')].concat(rows.map(row => headers.map(h => csvEscape(row[h])).join(','))).join('\n');
   downloadBlob(csv, 'tyre_dashboard_export.csv', 'text/csv;charset=utf-8;');
   toast('CSV exported');

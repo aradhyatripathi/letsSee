@@ -340,3 +340,34 @@ test('storage holding something unexpected does not leave a blank page', { skip 
     });
   }
 });
+
+// The CSV is meant to be handed to a colleague, so the person who opens it is not
+// the person who chose what went into it. A cell beginning = + - @ is a formula to
+// Excel and to LibreOffice, and a company name taken from an imported file — or from
+// a filing, via the extractor — arrived as a live one.
+test('an exported CSV cannot hand the recipient a formula', { skip }, async () => {
+  await withPage(async (page) => {
+    await importPayload(page, {
+      records: [record({ id: 'x', company: "=cmd|'/c calc'!A1", source: '@SUM(1+1)*cmd' })]
+    });
+
+    const csv = await page.evaluate(async () => {
+      // Catch the blob the export builds rather than letting the browser download it.
+      let captured = '';
+      const real = URL.createObjectURL;
+      URL.createObjectURL = (blob) => { captured = blob; return 'blob:stub'; };
+      document.getElementById('export-csv-btn').click();
+      URL.createObjectURL = real;
+      return captured ? await captured.text() : '';
+    });
+
+    assert.ok(csv, 'the export produced something');
+    for (const line of csv.split('\n').slice(1)) {
+      for (const cell of line.split(',')) {
+        const bare = cell.replace(/^"|"$/g, '');
+        assert.ok(!/^[=+\-@]/.test(bare), `a cell opens with a formula character: ${cell.slice(0, 40)}`);
+      }
+    }
+    assert.match(csv, /'=cmd/, 'the value is still there, marked as text');
+  });
+});

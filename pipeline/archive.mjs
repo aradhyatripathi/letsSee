@@ -65,20 +65,64 @@ const MAX_RECORD_DEPTH = 64;
  * Iterative with an explicit stack, and it reports excessive depth rather than
  * dying of it: a structure this deep is malformed, and saying so is the answer.
  */
-function longestString(record) {
-  let worst = { len: 0, path: null, tooDeep: false };
+/**
+ * What limit applies to the string at this path.
+ *
+ * A quote is a span of a filing, and verification already says how long a span may
+ * be — so the archive uses the same number rather than a second, looser one. That
+ * matters because the old rule was 2,000 for everything: split a filing across the
+ * twenty-one quote fields at 1,999 characters each and every field passed, which
+ * put the document into the archive after all.
+ */
+function limitFor(path) {
+  if (/^quotes\./.test(path)) return TyreCore.MAX_QUOTE_CHARS;
+  if (/^verification\.checks\.\d+\.quote$/.test(path)) return TyreCore.MAX_QUOTE_CHARS;
+  return MAX_STRING_CHARS;
+}
+
+/**
+ * Every string in a record, measured against what that field is for.
+ *
+ * Iterative with a depth cap, and it reports excessive depth rather than dying of
+ * it: a structure this deep is malformed, and saying so is the answer.
+ *
+ * It reports the total as well as the worst offender. Bounding only the longest
+ * string is not a bound on the document: the check passed a record carrying a whole
+ * filing spread evenly across its fields, because no single field was long.
+ */
+function measureStrings(record) {
+  const result = { longest: { len: 0, path: null }, total: 0, tooDeep: false, over: [] };
   const stack = [[record, '', 0]];
   while (stack.length) {
     const [node, path, depth] = stack.pop();
     if (typeof node === 'string') {
-      if (node.length > worst.len) worst = { ...worst, len: node.length, path: path || '(root)' };
+      const where = path || '(root)';
+      result.total += node.length;
+      if (node.length > result.longest.len) result.longest = { len: node.length, path: where };
+      const limit = limitFor(where);
+      if (node.length > limit) result.over.push({ path: where, len: node.length, limit });
     } else if (node && typeof node === 'object') {
-      if (depth >= MAX_RECORD_DEPTH) { worst.tooDeep = true; continue; }
+      if (depth >= MAX_RECORD_DEPTH) { result.tooDeep = true; continue; }
       for (const [k, v] of Object.entries(node)) stack.push([v, path ? `${path}.${k}` : k, depth + 1]);
     }
   }
-  return worst;
+  return result;
 }
+
+// What an archived record is allowed to be made of. Boundary 2 turns on the archive
+// holding reviewed output and nothing else, and an unknown key is the easiest place
+// to put something else: a record with the retrieved filing hung off a
+// `filing_pages` object passed every check there was, because every check looked
+// only at the keys it knew about.
+const ARCHIVE_KEYS = new Set([
+  'id', 'company', 'quarter', 'source', 'retrieved_at',
+  'currency', 'core', 'quotes', 'segments', 'outlook', 'review', 'verification'
+]);
+
+// All the text in one record, added up. Twenty-one quotes at their own limit plus
+// three outlook paragraphs comes to roughly 20,000; this leaves room above that and
+// is still an order of magnitude below any filing.
+const MAX_RECORD_TEXT_CHARS = 32000;
 
 const USAGE = `
 The cross-quarter archive of reviewed records.
@@ -206,12 +250,24 @@ export function archiveRejectionReason(record) {
   const problems = TyreCore.validateStored(record);
   if (problems.length) return `malformed: ${problems.join('; ')}`;
 
-  const worst = longestString(record);
-  if (worst.tooDeep) {
+  // Depth first: it is the one that used to throw rather than return, so it is the
+  // one whose reason a reader most needs to see.
+  const text = measureStrings(record);
+  if (text.tooDeep) {
     return `it nests more than ${MAX_RECORD_DEPTH} levels deep — a record is four at most, so this is not one`;
   }
-  if (worst.len > MAX_STRING_CHARS) {
-    return `${worst.path} holds ${worst.len.toLocaleString('en-US')} characters — that is a document, not a quote (limit ${MAX_STRING_CHARS})`;
+
+  const extra = Object.keys(record).filter((k) => !ARCHIVE_KEYS.has(k));
+  if (extra.length) {
+    return `it carries ${extra.map((k) => JSON.stringify(k)).join(', ')}, which ${extra.length === 1 ? 'is not a field' : 'are not fields'} of a record — the archive keeps reviewed records, not documents attached to them`;
+  }
+
+  if (text.over.length) {
+    const worst = text.over.sort((a, b) => b.len - a.len)[0];
+    return `${worst.path} holds ${worst.len.toLocaleString('en-US')} characters — that is a document, not a quote (limit ${worst.limit})`;
+  }
+  if (text.total > MAX_RECORD_TEXT_CHARS) {
+    return `its text comes to ${text.total.toLocaleString('en-US')} characters across ${Object.keys(record).length} fields — a filing spread thin is still a filing (limit ${MAX_RECORD_TEXT_CHARS})`;
   }
   const size = JSON.stringify(record).length;
   if (size > MAX_RECORD_CHARS) {

@@ -373,3 +373,62 @@ test('a rejection still removes that company\'s own archived record', async (t) 
   assert.equal(result.removed.length, 1);
   assert.deepEqual((await readArchive(dir)).records, []);
 });
+
+// The archive is the one thing that outlives a run, it is git-tracked, and the
+// operator is told to commit it — so it is exactly the destination boundary 2
+// forbids for a retrieved filing. The guard that was supposed to stop that measured
+// the single longest string, which is not a bound on a document: split a filing
+// across the twenty-one quote fields and no one field is long.
+test('a filing spread across a record\'s fields is still refused', () => {
+  const filing = 'CEAT LIMITED UNAUDITED FINANCIAL RESULTS FOR THE QUARTER ENDED 30 JUNE 2025. '.repeat(200);
+  const spread = record();
+  let at = 0;
+  for (const k of Object.keys(spread.quotes)) { spread.quotes[k] = filing.slice(at, at + 1999); at += 1999; }
+
+  const reason = archiveRejectionReason(spread);
+  assert.match(reason, /that is a document, not a quote \(limit 400\)/,
+    'a quote is bounded by what verification says a quote is, not by a looser number');
+});
+
+// Every check looked only at the keys it knew about, so a document hung off a key
+// nothing validates went through all of them.
+test('a record carrying a field that is not a record field is refused', () => {
+  const attached = record();
+  attached.filing_pages = { p0: 'CEAT LIMITED '.repeat(50) };
+  assert.match(archiveRejectionReason(attached), /"filing_pages".*not a field of a record/);
+
+  // Two of them are named, so the operator knows what to strip.
+  const worse = record();
+  worse.filing_pages = {};
+  worse.raw_text = 'x';
+  assert.match(archiveRejectionReason(worse), /"filing_pages", "raw_text"/);
+});
+
+// The per-field limits bound a record with a known shape, and a record's shape is
+// only mostly known: review.flags is a list, so it has no field count to bound. A
+// hundred entries of two thousand characters each is a document, and every entry is
+// inside its own limit. That is what the total is for.
+test('a record whose text adds up to a document is refused even when every field fits', () => {
+  const listed = record();
+  listed.review = { ...listed.review, flags: Array.from({ length: 100 }, () => 'x'.repeat(1999)) };
+
+  assert.match(archiveRejectionReason(listed), /a filing spread thin is still a filing/);
+  // And an ordinary record is nowhere near it.
+  assert.equal(archiveRejectionReason(record()), null);
+});
+
+// The three rules have to leave room for a record that legitimately uses all of it:
+// twenty-one quotes at the quote limit, three paragraphs of commentary, and a
+// verification block echoing every quote back. If the total were tighter than that
+// it would refuse honest records, and the per-field limits would be the only real
+// guard.
+test('a record using every field to its limit is still archivable', () => {
+  const full = record();
+  for (const k of Object.keys(full.quotes)) full.quotes[k] = 'q'.repeat(TyreCore.MAX_QUOTE_CHARS);
+  full.outlook = { commentary: 'c'.repeat(2000), rm_trend: 'r'.repeat(2000), capex: 'x'.repeat(2000) };
+  full.verification = {
+    ok: true, checked: 21, verified: 21, failed: 0, unquoted: 0,
+    checks: Object.keys(full.quotes).map((k) => ({ key: k, value: 1, quote: 'q'.repeat(TyreCore.MAX_QUOTE_CHARS), score: 1, status: 'verified' }))
+  };
+  assert.equal(archiveRejectionReason(full), null);
+});
