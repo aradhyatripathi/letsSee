@@ -16,6 +16,22 @@ import zlib from 'node:zlib';
 const WHITESPACE = ' \t\r\n\f\0';
 const DELIMITERS = '()<>[]{}/%';
 
+// Everything below this line is a bound on what a file we did not write may cost us.
+//
+// The retrieval runner fetches from investor-relations sites and hands whatever
+// comes back to this extractor, so the input is not trusted and the guarantee that
+// matters is run.mjs's: a failure on one company is recorded and the run continues.
+// That guarantee is only as good as this file's willingness to give up. An
+// unbounded extractor does not fail the company — it takes the process down, and
+// every other company's work with it, because a heap abort is not catchable.
+//
+// Each limit is set well above a real filing (a 200-page annual report is around
+// 30 MB with a few MB of content streams) and well below anything that hurts.
+const MAX_PDF_BYTES = 64 * 1024 * 1024;
+const MAX_INFLATED_BYTES = 16 * 1024 * 1024;      // one stream
+const MAX_TOTAL_INFLATED_BYTES = 64 * 1024 * 1024; // the whole document
+const EXTRACT_BUDGET_MS = 20000;
+
 /** True when the buffer carries a PDF header (some producers pad before it). */
 export function looksLikePdf(buffer) {
   if (!buffer || !buffer.length) return false;
@@ -33,18 +49,27 @@ export function extractPdfText(buffer) {
     if (!buffer || !buffer.length) return { ...empty, error: 'empty buffer' };
     const buf = Buffer.isBuffer(buffer) ? buffer : Buffer.from(buffer);
     if (!looksLikePdf(buf)) return { ...empty, error: 'not a PDF: no %PDF- header in the first 1024 bytes' };
+    if (buf.length > MAX_PDF_BYTES) {
+      return { ...empty, error: `PDF is ${mb(buf.length)} MB, past the ${mb(MAX_PDF_BYTES)} MB this extractor will read — open it and save the financial-statement pages, or paste the text` };
+    }
 
     const raw = buf.toString('latin1');
     const parts = [];
+    const deadline = Date.now() + EXTRACT_BUDGET_MS;
     let streams = 0;
     let objectStreams = 0;
     let undecodable = 0;
+    let inflatedTotal = 0;
 
     for (const stream of iterateStreams(buf, raw)) {
+      if (Date.now() > deadline) {
+        return { ...empty, error: `PDF text extraction gave up after ${EXTRACT_BUDGET_MS / 1000}s — the file is structured in a way this extractor cannot walk quickly`, streams, objectStreams };
+      }
       if (stream.kind === 'objstm') { objectStreams++; continue; }
       if (stream.kind === 'skip') continue;
-      const content = decodeStream(stream);
+      const content = decodeStream(stream, MAX_TOTAL_INFLATED_BYTES - inflatedTotal);
       if (content === null) { undecodable++; continue; }
+      inflatedTotal += content.length;
       streams++;
       const text = textFromContentStream(content);
       if (text) parts.push(text);
@@ -79,13 +104,16 @@ function* iterateStreams(buf, raw) {
     objRe.lastIndex = m.index + m[0].length;
   }
 
+  const findEndobj = forwardScanner(raw, 'endobj');
+  const findStream = forwardScanner(raw, 'stream');
+
   for (let i = 0; i < starts.length; i++) {
     const from = starts[i];
     const hardEnd = i + 1 < starts.length ? starts[i + 1] : raw.length;
-    const endObj = raw.indexOf('endobj', from);
+    const endObj = findEndobj(from);
     const to = endObj !== -1 && endObj < hardEnd ? endObj : hardEnd;
 
-    const kw = raw.indexOf('stream', from);
+    const kw = findStream(from);
     if (kw === -1 || kw >= to) continue;
 
     const dict = raw.slice(from, kw);
@@ -112,6 +140,31 @@ function* iterateStreams(buf, raw) {
   }
 }
 
+/**
+ * indexOf for a needle looked for from steadily increasing offsets.
+ *
+ * The offsets here are object starts, which ascend, and indexOf over an ascending
+ * start is non-decreasing — so a hit already past the new start is still the
+ * answer, and once the needle is absent from the tail it is absent from every
+ * later tail. Restarting the search each time made the scan quadratic: a file that
+ * is nothing but `N 0 obj` lines and contains neither keyword scanned to
+ * end-of-file once per object, so 8 MB of them took 160 seconds of blocked event
+ * loop — with every other company in the run waiting behind it.
+ */
+function forwardScanner(raw, needle) {
+  let at = -1;
+  let exhausted = false;
+  return (from) => {
+    if (exhausted) return -1;
+    if (at >= from) return at;
+    at = raw.indexOf(needle, from);
+    if (at === -1) exhausted = true;
+    return at;
+  };
+}
+
+function mb(bytes) { return Math.round(bytes / (1024 * 1024)); }
+
 function classify(dict) {
   // Object streams hold compressed *non-stream* objects, so they never contain
   // page content; inflating one would only produce object definitions.
@@ -122,29 +175,40 @@ function classify(dict) {
   return 'content';
 }
 
-function decodeStream({ dict, data }) {
+function decodeStream({ dict, data }, budget) {
   const filters = [...dict.matchAll(/\/(FlateDecode|LZWDecode|ASCII85Decode|ASCIIHexDecode|DCTDecode|JPXDecode|CCITTFaxDecode|RunLengthDecode|JBIG2Decode)\b/g)]
     .map((f) => f[1]);
 
   if (!filters.length) return data.toString('latin1');
   if (filters.some((f) => f !== 'FlateDecode')) return null;
 
-  const inflated = inflate(data);
+  const inflated = inflate(data, budget);
   return inflated === null ? null : inflated.toString('latin1');
 }
 
-function inflate(data) {
+/**
+ * Inflate one stream, refusing to produce more than `budget` bytes.
+ *
+ * Deflate's ratio is unbounded in principle and about 1000:1 on a stream of
+ * zeroes, so a few hundred kilobytes of PDF expands to gigabytes — and the abort
+ * that follows is a heap failure, which no caller can catch and which loses the
+ * whole run rather than this one company. A stream that will not fit is treated
+ * exactly like a stream in an unsupported filter: undecodable, counted, skipped.
+ */
+function inflate(data, budget) {
+  const maxOutputLength = Math.max(0, Math.min(MAX_INFLATED_BYTES, budget == null ? MAX_INFLATED_BYTES : budget));
+  if (!maxOutputLength) return null;
   let start = 0;
   while (start < data.length && WHITESPACE.includes(String.fromCharCode(data[start]))) start++;
   const body = start ? data.subarray(start) : data;
   for (const fn of [zlib.inflateSync, zlib.inflateRawSync]) {
     try {
-      return fn(body);
+      return fn(body, { maxOutputLength });
     } catch {
       // Truncated streams are common in the wild; take whatever inflated before
       // the error rather than losing the whole page.
       try {
-        return fn(body, { finishFlush: zlib.constants.Z_SYNC_FLUSH });
+        return fn(body, { finishFlush: zlib.constants.Z_SYNC_FLUSH, maxOutputLength });
       } catch {
         /* try the next codec */
       }

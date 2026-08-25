@@ -48,6 +48,8 @@ const HEADLINE_KEYS = ['revenue', 'ebitda_margin', 'pat'];
 /** Markdown for a whole run. */
 export function buildRunReport(runResult) {
   const run = runResult;
+  if (run.stop_after === 'retrieval') return buildRetrievalReport(run);
+  if (run.stop_after === 'prompt') return buildPromptReport(run);
   const t = tally(run);
   const out = [];
 
@@ -58,7 +60,7 @@ export function buildRunReport(runResult) {
   out.push(...kvTable([
     ['Quarter', run.quarter],
     ['Retrieval mode', run.mode === 'live' ? 'live (network)' : 'fixture (offline)'],
-    ['Extractor', run.extractor === 'api' ? `Claude API — ${run.model}` : 'deterministic offline extractor (no API call)'],
+    ['Extractor', extractorLabel(run)],
     ['Started', run.started_at],
     ['Finished', run.generated_at],
     ['Duration', `${(run.duration_ms / 1000).toFixed(1)}s`],
@@ -157,7 +159,9 @@ export function buildRunReport(runResult) {
           return [
             metric ? metric.label : chk.key,
             TyreCore.formatMetric(chk.value, metric, c.record.currency),
-            chk.status === 'unquoted' ? 'no quote returned' : `not found in source (best match ${chk.score})`,
+            chk.status === 'unquoted' ? 'no quote returned'
+              : chk.status === 'quote_too_long' ? (chk.detail || `a ${chk.quote.length}-character section of the filing, not the line reporting the figure`)
+              : `not found in source (best match ${chk.score})`,
             chk.quote ? `"${clip(chk.quote, 160)}"` : '—'
           ];
         });
@@ -232,10 +236,12 @@ export async function writeRunReport(runResult, path) {
 /** The stdout summary: what happened, and the two things to do next. */
 export function summarizeForConsole(runResult) {
   const run = runResult;
+  if (run.stop_after === 'retrieval') return summarizeRetrieval(run);
+  if (run.stop_after === 'prompt') return summarizePrompts(run);
   const t = tally(run);
   const lines = [];
 
-  const engine = run.extractor === 'api' ? `Claude API (${run.model})` : 'offline deterministic extractor';
+  const engine = extractorLabel(run);
   lines.push(`Run ${run.run_id} — ${run.quarter} — ${run.mode} retrieval, ${engine}`);
   lines.push('');
   lines.push(`  ${t.ok.length} of ${t.total} companies produced a record`);
@@ -268,6 +274,275 @@ export function summarizeForConsole(runResult) {
   lines.push('     These records are PENDING REVIEW — nothing here is trustworthy until a person approves it.');
 
   return lines.join('\n');
+}
+
+/* ------------------------------------------------- stop-early run reports -- */
+
+// Retrieval-only. This is the answer to the one question that cannot be settled
+// from a machine with no route to these sites: which companies' investor-relations
+// pages actually hand over a filing, and which need a person to download it. The
+// table is written to be pasted straight into the week note.
+function buildRetrievalReport(run) {
+  const companies = run.companies || [];
+  const ok = companies.filter((c) => c.ok);
+  const failed = companies.filter((c) => !c.ok);
+  const thin = ok.filter((c) => financialSignal(c).level === 'none');
+  const out = [];
+
+  out.push(`# Retrieval check — ${run.run_id}`, '');
+  out.push('> Stage 1 only. Nothing was extracted, no model was called, and no record was produced.', '');
+
+  out.push('## Run', '');
+  out.push(...kvTable([
+    ['Quarter', run.quarter],
+    ['Retrieval mode', run.mode === 'live' ? 'live (network)' : 'fixture (offline)'],
+    ['Started', run.started_at],
+    ['Duration', `${(run.duration_ms / 1000).toFixed(1)}s`],
+    ['Companies attempted', String(companies.length)],
+    ['Run directory', run.run_dir]
+  ]));
+  out.push('');
+
+  out.push('## Outcome', '');
+  out.push(`- **${ok.length} of ${companies.length}** companies returned text.`);
+  out.push(
+    failed.length
+      ? `- **${failed.length}** returned nothing usable: ${failed.map((c) => c.name).join(', ')}. These need the manual upload path.`
+      : '- Every company returned something.'
+  );
+  if (thin.length) {
+    out.push(`- **${thin.length}** returned text with no financial-statement wording in it: ${thin.map((c) => c.name).join(', ')}. That is the signature of a cookie wall or a JavaScript shell, not a filing — treat these as failures.`);
+  }
+  out.push('');
+
+  out.push('## What each source returned', '');
+  out.push(...table(
+    ['Company', 'Result', 'Strategy that worked', 'Source', 'Text', 'Reads like a filing?'],
+    companies.map((c) => {
+      const r = c.retrieval || {};
+      const sig = financialSignal(c);
+      return [
+        c.name,
+        r.ok ? 'ok' : '**failed**',
+        strategyLabel(r.strategy),
+        r.source || '—',
+        r.ok ? formatBytes(r.bytes) : '—',
+        r.ok ? sig.label : '—'
+      ];
+    })
+  ));
+  out.push('');
+  out.push('"Reads like a filing?" counts financial-statement wording in the retrieved text. It is a smoke test, not a guarantee — a page can score well and still be the wrong quarter.');
+  out.push('');
+
+  const withAttempts = companies.filter((c) => ((c.retrieval && c.retrieval.attempts) || []).length);
+  if (withAttempts.length) {
+    out.push('## Every strategy tried, in order', '');
+    for (const c of withAttempts) {
+      out.push(`**${c.name}**`, '');
+      for (const a of c.retrieval.attempts) {
+        out.push(`- \`${strategyLabel(a.strategy)}\` → ${a.target} — ${a.ok ? 'ok' : a.error} (${a.ms}ms)`);
+      }
+      out.push('');
+    }
+  }
+
+  if (failed.length || thin.length) {
+    out.push('## Companies needing a manual download', '');
+    for (const c of [...failed, ...thin]) {
+      out.push(`- **${c.name}** — download the quarterly results PDF, then:`);
+      out.push(`  \`\`\``);
+      out.push(`  node pipeline/run.mjs --companies=${c.id} --file=${c.id}:<path-to.pdf>`);
+      out.push(`  \`\`\``);
+    }
+    out.push('');
+  }
+
+  out.push('## Boundaries this run respected', '');
+  out.push('- A person triggered it and it exited. Nothing schedules it.');
+  out.push('- Retrieved text stayed in this run directory as working space. It was not archived, synced or uploaded.');
+  out.push('');
+  return out.join('\n');
+}
+
+// Prompt-only. The pipeline stops one step before the network call it cannot make,
+// having written down exactly what it would have said.
+function buildPromptReport(run) {
+  const companies = run.companies || [];
+  const ok = companies.filter((c) => c.ok && c.prompt);
+  const failed = companies.filter((c) => !c.ok);
+  const out = [];
+
+  out.push(`# Extraction prompts — ${run.run_id}`, '');
+  out.push('> No model was called. Each prompt below is exactly what would have been sent, written to disk for a person to carry into a Claude chat by hand.', '');
+
+  out.push('## Run', '');
+  out.push(...kvTable([
+    ['Quarter', run.quarter],
+    ['Retrieval mode', run.mode === 'live' ? 'live (network)' : 'fixture (offline)'],
+    ['Prompts written', String(ok.length)],
+    ['Started', run.started_at],
+    ['Run directory', run.run_dir]
+  ]));
+  out.push('');
+
+  out.push('## Prompts', '');
+  out.push(...table(
+    ['Company', 'Prompt file', 'Characters', 'Filing text it was built from', 'Source text trimmed?'],
+    ok.map((c) => [
+      c.name,
+      '`' + c.prompt.path + '`',
+      c.prompt.chars.toLocaleString('en-US'),
+      c.prompt.source_path ? '`' + c.prompt.source_path + '`' : '—',
+      selectionNote(c.prompt.selection)
+    ])
+  ));
+  out.push('');
+
+  if (failed.length) {
+    out.push('## Failed before a prompt could be built', '');
+    for (const c of failed) {
+      out.push(`- **${c.name}** (${c.stage}): ${clip(c.error, 240)}`);
+    }
+    out.push('');
+  }
+
+  out.push('## Carrying the answer back', '');
+  out.push('See `prompts/README.md` in this run directory for the exact command per company.');
+  out.push('');
+  out.push('The answer is verified against the same retrieved text the prompt was built from, so a quote that is not in the filing is rejected on the way back in. Carrying it by hand does not skip the gate — it only replaces the transport.');
+  out.push('');
+  return out.join('\n');
+}
+
+function summarizeRetrieval(run) {
+  const companies = run.companies || [];
+  const ok = companies.filter((c) => c.ok);
+  const failed = companies.filter((c) => !c.ok);
+  const thin = ok.filter((c) => financialSignal(c).level === 'none');
+  const lines = [];
+
+  lines.push(`Run ${run.run_id} — ${run.quarter} — ${run.mode} retrieval, Stage 1 only (nothing extracted)`);
+  lines.push('');
+  lines.push(`  ${ok.length} of ${companies.length} companies returned text`);
+  for (const c of ok) {
+    const r = c.retrieval;
+    lines.push(`    - ${c.name}: ${strategyLabel(r.strategy)}, ${formatBytes(r.bytes)}, ${financialSignal(c).label}`);
+  }
+  if (failed.length) {
+    lines.push(`  ${failed.length} returned nothing usable:`);
+    for (const c of failed) lines.push(`    - ${c.name}: ${clip(c.error, 160)}`);
+  }
+  if (thin.length) {
+    lines.push('');
+    lines.push(`  ${thin.length} returned text with no financial wording — likely a cookie wall or a JS shell, not a filing:`);
+    for (const c of thin) lines.push(`    - ${c.name}`);
+  }
+  lines.push('');
+  lines.push(`  Report: ${run.report_path}`);
+  lines.push('');
+  lines.push('Next steps');
+  lines.push('  1. Paste the table in the report into the week note — this is the retrieval answer the note is missing.');
+  if (failed.length || thin.length) {
+    lines.push('  2. Download the filing by hand for the companies listed above and re-run them with --file=<id>:<path>.');
+  } else {
+    lines.push('  2. Nothing needs a manual download — every source returned a filing.');
+  }
+  return lines.join('\n');
+}
+
+function summarizePrompts(run) {
+  const companies = run.companies || [];
+  const ok = companies.filter((c) => c.ok && c.prompt);
+  const failed = companies.filter((c) => !c.ok);
+  const lines = [];
+
+  lines.push(`Run ${run.run_id} — ${run.quarter} — prompts written, no model called`);
+  lines.push('');
+  lines.push(`  ${ok.length} of ${companies.length} prompts written`);
+  for (const c of ok) {
+    lines.push(`    - ${c.name}: ${c.prompt.chars.toLocaleString('en-US')} characters → ${c.prompt.path}`);
+  }
+  if (failed.length) {
+    lines.push(`  ${failed.length} failed before a prompt could be built:`);
+    for (const c of failed) lines.push(`    - ${c.name} (${c.stage}): ${clip(c.error, 160)}`);
+  }
+  lines.push('');
+  lines.push(`  Report: ${run.report_path}`);
+  return lines.join('\n');
+}
+
+// A retrieved page that came back 200 with no financial wording in it is the
+// failure this whole check exists to catch: retrieval "succeeded", and what it
+// got was a cookie banner. Counting distinct statement markers separates that
+// from a real filing without pretending to judge whether it is the right one.
+const FINANCIAL_MARKERS = [
+  /revenue from operations/i, /total income/i, /\bebitda\b/i, /profit before tax/i,
+  /profit after tax/i, /\bpat\b/i, /earnings per share/i, /balance sheet/i,
+  /cash flow/i, /unaudited financial results/i, /audited financial results/i,
+  /segment (?:revenue|results)/i, /finance cost/i, /total equity/i
+];
+
+/** How many distinct financial-statement markers appear in retrieved text. */
+export function countFinancialMarkers(text) {
+  const sample = String(text || '');
+  if (!sample) return 0;
+  return FINANCIAL_MARKERS.filter((re) => re.test(sample)).length;
+}
+
+/** How many numbers are in it. A filing is dense with them; a banner is not. */
+export function countNumbers(text) {
+  const found = String(text || '').match(/\d[\d,]*(?:\.\d+)?/g);
+  return found ? found.length : 0;
+}
+
+// Markers alone are not enough: a nav bar or a cookie banner can mention "cash flow" and
+// "balance sheet" and score well while containing no figures and barely any text. A
+// filing is long and full of numbers, so length and digits are part of the verdict.
+const MIN_FILING_CHARS = 3000;
+const MIN_FILING_NUMBERS = 20;
+
+function financialSignal(entry) {
+  const r = entry.retrieval;
+  if (!r || !r.ok) return { level: 'none', hits: 0, label: '—' };
+  const hits = r.financial_markers;
+  if (!Number.isFinite(hits)) return { level: 'unknown', hits: 0, label: 'not checked' };
+
+  const short = Number.isFinite(r.bytes) && r.bytes < MIN_FILING_CHARS;
+  const fewNumbers = Number.isFinite(r.number_count) && r.number_count < MIN_FILING_NUMBERS;
+  if (short || fewNumbers) {
+    const why = [short ? 'too short' : null, fewNumbers ? `only ${r.number_count} numbers in it` : null]
+      .filter(Boolean).join(', ');
+    return { level: 'none', hits, label: `**no — ${why}**` };
+  }
+  if (hits === 0) return { level: 'none', hits, label: '**no — no financial wording found**' };
+  if (hits <= 3) return { level: 'weak', hits, label: `thin (${hits} of ${FINANCIAL_MARKERS.length} markers)` };
+  return { level: 'strong', hits, label: `yes (${hits} of ${FINANCIAL_MARKERS.length} markers)` };
+}
+
+function selectionNote(selection) {
+  if (!selection) return 'no';
+  if (selection.trimmed === false || selection.selected === selection.total) return 'no — whole document sent';
+  const kept = selection.selected || selection.kept || null;
+  const total = selection.total || selection.original || null;
+  if (kept && total) {
+    return `yes — ${Math.round((kept / total) * 100)}% of the document kept (${kept.toLocaleString('en-US')} of ${total.toLocaleString('en-US')} chars)`;
+  }
+  return 'yes';
+}
+
+// A run whose records were carried out of a chat by hand was described to the operator
+// as "deterministic offline extractor (no API call)" — which is a different provenance
+// entirely, and the one thing a reader of this report most needs to get right.
+function extractorLabel(run) {
+  switch (run.extractor) {
+    case 'api': return `Claude API — ${run.model}`;
+    case 'manual': return 'Claude, by hand — answers pasted back from a chat (--response)';
+    case 'offline': return 'deterministic offline extractor (no API call)';
+    case 'stopped-after-retrieval': return 'none — the run stopped after retrieval';
+    case 'stopped-after-prompt': return 'none — the run wrote the prompt and stopped';
+    default: return String(run.extractor || 'unknown');
+  }
 }
 
 /* ---------------------------------------------------------------- helpers -- */
@@ -338,4 +613,27 @@ function table(header, rows) {
 
 function kvTable(pairs) {
   return table(['Field', 'Value'], pairs);
+}
+
+/**
+ * What a CLI knows about the approvals it is acting on, said out loud.
+ *
+ * Approval happens in one place: a person clicking a button in the dashboard, in
+ * their own browser. Everything on this side reads a records file, and a file is a
+ * copy of what that browser wrote — or a copy of what somebody wants us to think it
+ * wrote. There is no way to tell the two apart: a static page has no secret to sign
+ * with, so a signature would be one anybody could forge.
+ *
+ * What can be fixed is the tools' phrasing. Saying "1 approved record" reads as a
+ * fact the tool checked; naming the file it came out of reads as what it is. The
+ * deck and the workbook carry the same distinction in their own text.
+ */
+export function approvalSourceNote(count, path) {
+  if (!count) return '';
+  return [
+    `  ${count} approval${count === 1 ? '' : 's'} read from ${path}.`,
+    '  Approvals are made in the dashboard; this reads what the file records about them',
+    '  and cannot re-check them.',
+    ''
+  ].join('\n');
 }

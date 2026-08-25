@@ -11,19 +11,33 @@ The most important thing to say first, because everything else is qualified by i
 the environment this was built in there was no outbound network to NSE, BSE, or any
 company's investor-relations site, and no Anthropic API key. So the honest answer to
 "which companies' retrieval worked cleanly and which needed the manual fallback" is that
-we do not know yet. Zero of the nine were retrieved live. All nine ran end to end
+we do not know yet. Zero were retrieved live. Every company ran end to end
 through synthetic fixture filings — one text file per company, each marked SYNTHETIC TEST
 DATA on its first line, written in the register these companies actually file in, with
 invented but internally consistent numbers. No figure anywhere in this repo is a real
 reported figure.
 
-What that does and does not prove. It proves the contract: nine companies go through
+What that does and does not prove. It proves the contract: every company goes through
 retrieval, extraction, quote verification, the stored shape, the review screen, the
-four-sheet workbook and Q&A without a translation layer anywhere, and the whole thing is
+four-sheet workbook, the deck and Q&A without a translation layer anywhere, and the whole thing is
 runnable by a colleague with `node pipeline/run.mjs` and no credentials. It proves the
 quote-verification gate rejects quotes that are not in the source, because we can force
 that case deliberately. It proves nothing at all about whether Apollo's IR page will
 serve us a PDF next Tuesday.
+
+Since that was first written, three routes have been added specifically so this does not
+have to stay unknown until a key arrives. `--retrieve-only` runs Stage 1 alone and reports
+what each source actually returned — including a count of financial-statement markers in
+the text, so a cookie wall that answered 200 reads as a failure rather than a success with
+thin content. It needs network but no key, so anyone with an ordinary internet connection
+can settle the retrieval question in about a minute. `--emit-prompt` writes the real
+extraction prompt — same guardrails, same schema, same filing text — and sends nothing;
+`--response=<id>:<path>` reads a pasted answer back in and puts it through the same
+verification an API answer goes through, against the same retrieved text. A person with a
+Claude chat open is the transport. That is the scoping note's Phase 1 — validate the
+schema against real filings — available now, with no key and no budget, and a carried
+answer cannot skip the quote gate: the tests include a fabricated quote and a genuine
+quote carrying a figure that is not in it, and both are rejected on the way back in.
 
 The retrieval code for a real run is written properly rather than stubbed: per-company
 ordered source lists, an operator-supplied file tried first, Firecrawl when a key is
@@ -33,18 +47,18 @@ extractor as if it were a filing. Live mode refuses to start without an API key 
 than quietly falling back to the deterministic offline extractor and producing records
 that look like model output. But written correctly is not the same as verified, and the
 first real run should be treated as the actual test of Stage 1. Our expectation, based on
-how these sites behave generally, is that the two or three companies whose results live
+how these sites behave generally, is that the companies whose results live
 behind an NSE or BSE page will need the manual-upload path, and that the IR pages will
 need their URLs rechecked every quarter because these sites reorganise their financials
 sections routinely. The `--file=<company>:<path>` flag and the dashboard's upload panel
 exist so that is a thirty-second fix per company, not a blocker.
 
-One more thing that belongs in this section rather than buried: `pipeline/config/companies.mjs`
-holds nine companies, but only seven are certain. The spec names four explicitly and
-suggests three more; we filled the last two (Modi Rubber, PTL Enterprises) by inference
-from the listed Indian tyre universe and marked them `confirmed: false` in the file.
-Those two need checking against the original scoping note before anyone runs this for
-real. Changing the roster means editing that one list and nothing else.
+One more thing that belongs in this section rather than buried: the roster is seven
+companies, not nine. An earlier revision carried two more (Modi Rubber, PTL Enterprises)
+inferred to reach the scoping note's count; they were dropped as too small to matter to
+the comparison this exists to produce. The count is not load-bearing anywhere —
+`pipeline/config/companies.mjs` is the only file that knows which companies exist, and
+the suite has been run green at two, three, four, five, six, seven and nine.
 
 ## What broke, and what we did about it
 
@@ -158,11 +172,154 @@ The pattern across all five is worth stating once. None of them surfaced from a 
 one was found by reading the code against a hostile case, and every one would have put a
 confident, plausible, wrong number in front of a reviewer.
 
+## A third review pass, and what it says about the first two
+
+Everything above was written after two passes of reading the code against hostile
+cases. A third pass — six reviewers, each told to demonstrate a defect by running it,
+each finding then handed to an independent skeptic told to refute it — found seventeen
+more. The pattern is worth recording, because it is the same one every time and it is
+not "we were careless".
+
+Every serious finding was a guarantee that was stated but not enforced.
+
+The quote gate did not fire when nothing was quoted. `verifyQuotes` counted a figure with
+no quote as `unquoted` and still returned ok, on the reasoning — written into a test, with
+a comment explaining it — that a missing quote is not a fabricated one and should be
+surfaced rather than fail the extraction. The reasoning sounds right and the hole it left
+was total: a record of twenty-one invented numbers with no quotes anywhere passed and was
+stored, and the run reported it as clean.
+
+A rejected record reached every output if its status was spelled `'Rejected'`. Each output
+compared the string at its own call site, so a file not written by this dashboard put a
+record a person had explicitly thrown out into the workbook, the deck and the model's
+context.
+
+An imported file could approve records. The rule vouched for an incoming approval when the
+same record was already present with identical content — which proves the figures match
+and nothing whatever about who decided.
+
+A crafted record id ran as code, because the record list built `onclick` handlers by
+concatenating it.
+
+The archive would accept a whole retrieved filing, because a document is trivially an
+exact substring of itself and nothing capped the size — the one thing boundary 2 exists
+to prevent, in the one component built to enforce it.
+
+And a caveat that only appeared on the last of three paginated slides, so a reader looking
+at the first saw a clean-looking ranking of figures in three currencies with no warning at
+all.
+
+Two things worth drawing out. First: not one of these came from a run failing. Every one
+was found by reading the code against a case nobody had tried, and every one would have
+put a confident, plausible, wrong number in front of a reviewer. A green suite is evidence
+that the cases someone thought of pass.
+
+Second, and less comfortable: several of these were introduced *by* the earlier careful
+passes. The `unquoted` hole was a deliberate decision with a comment justifying it. The
+content-vouching rule was written specifically to stop a file importing its own approvals,
+and it stopped the obvious version while leaving the real one open. Care applied at the
+wrong altitude produces confident wrong code, and the only thing that caught it was
+someone else's adversarial reading.
+
+The fixes are in and each has a regression test. Where a test guards a defect by pattern
+rather than behaviour, the guard itself was checked by reintroducing the defect and
+confirming the suite goes red — the first two guards written for this did not, which is
+the same lesson one level up.
+
+## A fourth pass, and the thing the first three had in common
+
+A fourth review — six lenses this time (injection, trust elevation, paths and files,
+resource exhaustion, the browser, secrets and leakage), thirty agents, every finding
+handed to an independent skeptic told to refute it and demonstrated by running it — found
+twenty-four more. All twenty-four are fixed and each has a regression test, and each test
+was checked by reverting the fix and confirming it goes red.
+
+Three of them were the same defect in different clothes, and it is the one worth
+remembering.
+
+**A quote had no upper bound, so the central claim was vacuous.** The whole design rests
+on "a figure is backed by an exact quote from the filing, checked and not promised". The
+matcher asks whether the quote appears in the source; a document appears in itself. So a
+record whose quote for PAT was the entire filing scored a perfect 1.0 and was marked
+verified — and a fabricated figure equal to any number anywhere in the document (a
+headcount, a pin code, a prior-year column) came through with a green badge on the review
+card, a deck footnote saying "N of N quotes verified", a workbook column saying the same,
+and a quote the Q&A model was instructed to cite.
+
+The archive already knew a document is not a quote. It had refused exactly this record
+since the third pass, with a comment explaining why. It refused it at the last gate, after
+every screen and every artefact upstream had already vouched for it. A guard in the wrong
+place is not half a guard; for everything before it, it is no guard at all.
+
+**The reviewer's click landed on the wrong record.** Every review action resolved by
+looking an id up in the record list, which returns the first match, and ids come from
+imported files. Two records under one id sent the Approve click to the other one: the
+record the reviewer meant to approve stayed pending while a fabricated one was stamped
+approved by their own hand and went into the approved-only deck and workbook. A zero-width
+space in a company name made both cards and the confirmation toast read identically, so
+nothing on screen said what had happened.
+
+**An imported file ran script in the page.** The dashboard escaped what it believed were
+strings and concatenated what it believed were numbers, and a records file decides what a
+number is. A string in `currency.fx_to_inr` became markup. What that bought: a record the
+reviewer had *rejected* flipped to approved under a forged reviewer name, saved back to
+storage so it fired again on every load, and the API key the Settings tab promises is held
+in memory only sent to an attacker's URL.
+
+What the three have in common is that each was a place where a guarantee was checked
+somewhere but not everywhere, and the gap was invisible from inside the component that
+checked. The lesson from the third pass was "a guarantee stated but not enforced". The
+fourth pass sharpens it: **a guarantee enforced in one place is a guarantee that holds in
+one place.** The fixes reflect that — the quote bound moved into verification where the
+claim is made rather than staying at the archive; review actions address the record object
+rather than a name for it; types are forced where records enter rather than escaped where
+they are printed.
+
+Two smaller things worth recording because they change what the tool is like to use.
+Nothing bounded what a document we did not write could cost: a 200 MB response became
+7.2 GB of memory and a fatal abort that no `try/catch` can see, which loses every other
+company's work rather than the one page that caused it. And the dashboard sat blank for
+twelve and a half seconds on a machine that could not reach Google Fonts, because a
+stylesheet `@import` is render-blocking — on the locked-down laptop this is built for,
+which is the entire point of the offline design.
+
+Two of the guards written during this pass were themselves vacuous on the first attempt:
+the Content-Security-Policy test passed with the directive deleted because a broader one
+covered it, and the page-load test passed with the blocking import restored because the
+test refused the request instead of letting it hang. That is now the third round in which
+the first draft of a guard did not guard. It is worth assuming as a default.
+
+## What was added afterwards, and why none of it crossed a line
+
+Three things the scoping note asks for turned out to be non-goals in the spec rather than
+boundary violations, and all three are now built.
+
+The **deck** was the easiest call: Section 7 lists it as a non-goal for the week, and a
+deck built from records a person already reviewed schedules nothing and retains nothing.
+It renders from the same shared code in the CLI and in the browser, so the button and the
+command line cannot drift.
+
+The **cross-quarter archive** needed boundary 2 read closely rather than quickly. It
+forbids archiving *scraped source documents* unattended and names *reviewed output* as
+the permitted destination. A committed store of records a person approved is reviewed
+output by definition, so `pipeline/archive.mjs` keeps those and refuses anything else by
+name. Retrieved text never reaches it, and a test fails if a document-sized string ever
+lands in one. That gives the scoping note's accumulating history without touching its
+retention question.
+
+The archive also surfaced a genuine bug it would otherwise have caused: a deck built from
+multi-quarter records listed every company once per quarter, reading as though they were
+different companies. Comparison slides are now one quarter and the rest become trend
+slides.
+
+Worth being clear about what none of that changes: the review gate, both boundaries, and
+the fact that nothing here has been run against a real filing.
+
 ## What would have to change for Phase 2
 
 Phase 2 in the original scoping note is scheduled automation. This week deliberately did
 not build toward it — the two Section 0 boundaries hold everywhere in this repo, and the
-one-click "run all nine" button is a well-built manual trigger, not a step toward a cron.
+one-click "run the whole roster" button is a well-built manual trigger, not a step toward a cron.
 Moving to Phase 2 is a different project with different risk, and this is the honest list
 of what it would actually take.
 
@@ -176,8 +333,8 @@ truncation pre-pass needs to be section-aware and validated against real filings
 verification needs its threshold tuned against a corpus we have actually labelled, and
 probably needs to distinguish "not in the source" from "in the source but mangled by the
 PDF extractor", because those want different responses. Cost needs a number attached:
-one extraction call per company per run plus Q&A traffic is trivially cheap at nine
-companies and weekly cadence, and stops being trivial at a larger universe or a daily
+one extraction call per company per run plus Q&A traffic is trivially cheap at this
+roster size and a quarterly cadence, and stops being trivial at a larger universe or a daily
 one, so someone should put a real figure on it before the cadence is chosen.
 
 *Compliance.* This is the piece that cannot be engineered around, and it is the specific

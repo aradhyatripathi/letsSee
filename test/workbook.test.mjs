@@ -35,6 +35,15 @@ function fixtureRecord(id, company) {
   return result.record;
 }
 
+/** Forward A1 addressing. The naive `String.fromCharCode(65 + col)` breaks past Z, which
+ *  it now does — Core Financials carries 27 columns. */
+function colName(col) {
+  let s = '';
+  let n = col + 1;
+  while (n > 0) { const m = (n - 1) % 26; s = String.fromCharCode(65 + m) + s; n = Math.floor((n - 1) / 26); }
+  return s;
+}
+
 /** Inverse of the workbook's A1 addressing, so the mapping is checked, not assumed. */
 function parseAddr(addr) {
   const m = /^([A-Z]+)(\d+)$/.exec(addr);
@@ -61,7 +70,7 @@ test('the workbook has the four spec sheets in order, with the right headers', (
 
   assert.deepEqual(
     sheet(model, 'Core Financials').aoa[0],
-    ['Company', 'Quarter', 'Currency', 'Unit', 'Source', ...TyreCore.CORE_METRICS.map((m) => m.label)]
+    ['Company', 'Quarter', 'Review', 'Currency', 'Unit', 'Source', ...TyreCore.CORE_METRICS.map((m) => m.label)]
   );
   assert.deepEqual(
     sheet(model, 'Segments').aoa[0],
@@ -72,10 +81,14 @@ test('the workbook has the four spec sheets in order, with the right headers', (
       ...TyreCore.PRODUCT_KEYS.map((k) => `Product: ${k}`)
     ]
   );
-  assert.deepEqual(sheet(model, 'Outlook').aoa[0], ['Company', 'Quarter', 'Commentary', 'Raw Material Trend', 'Capex']);
+  // The three text columns say (unverified) in their heading: this is the one sheet
+  // no quote check applies to, and a reader moving between sheets should not have to
+  // know that.
+  assert.deepEqual(sheet(model, 'Outlook').aoa[0],
+    ['Company', 'Quarter', 'Commentary (unverified)', 'Raw Material Trend (unverified)', 'Capex (unverified)']);
   assert.deepEqual(
     sheet(model, 'Sources & Quotes').aoa[0],
-    ['Ref', 'Company', 'Quarter', 'Metric', 'Value', 'Currency', 'Unit', 'Source Quote', 'Verification', 'Source']
+    ['Ref', 'Company', 'Quarter', 'Review', 'Metric', 'Value', 'Currency', 'Unit', 'Source Quote', 'Verification', 'Source']
   );
 
   for (const s of model.sheets) {
@@ -108,7 +121,11 @@ test('nulls render as the em dash, never 0 and never blank', () => {
   const model = TyreCore.buildWorkbookModel([sparse]);
   const coreRow = sheet(model, 'Core Financials').aoa[1];
 
-  assert.deepEqual(coreRow.slice(0, METRIC_COLUMN_OFFSET), ['Sparse Co', 'Q1 FY26', 'INR', 'Crore', 'fixture:sparse.txt']);
+  assert.deepEqual(
+    coreRow.slice(0, METRIC_COLUMN_OFFSET),
+    ['Sparse Co', 'Q1 FY26', 'NOT REVIEWED', 'INR', 'Crore', 'fixture:sparse.txt'],
+    'an unreviewed row says so in the file that circulates furthest'
+  );
   TyreCore.CORE_METRICS.forEach((metric, i) => {
     const cell = coreRow[METRIC_COLUMN_OFFSET + i];
     if (metric.key === 'revenue') assert.equal(cell, 100);
@@ -130,6 +147,9 @@ test('every populated Core Financials cell traces to a real Sources & Quotes row
   const core = sheet(model, 'Core Financials');
   const sources = sheet(model, 'Sources & Quotes');
 
+  // Indices come from the header rather than being counted by hand, so adding a column
+  // to the audit sheet does not silently move these assertions onto the wrong cells.
+  const srcCol = Object.fromEntries(sources.aoa[0].map((name, i) => [name, i]));
   const sourceRowByRef = new Map(sources.aoa.slice(1).map((row) => [row[0], row]));
   assert.equal(sourceRowByRef.size, sources.aoa.length - 1, 'refs in Sources & Quotes are unique');
 
@@ -165,12 +185,13 @@ test('every populated Core Financials cell traces to a real Sources & Quotes row
     // And it must resolve to a row of the audit sheet carrying the same number.
     const sourceRow = sourceRowByRef.get(comment.ref);
     assert.ok(sourceRow, `${comment.ref} has no row in Sources & Quotes`);
-    assert.equal(sourceRow[1], company);
-    assert.equal(sourceRow[3], metric.label);
-    assert.equal(sourceRow[4], value, 'the audit row disagrees with the cell it explains');
+    assert.equal(sourceRow[srcCol.Company], company);
+    assert.equal(sourceRow[srcCol.Metric], metric.label);
+    assert.equal(sourceRow[srcCol.Value], value, 'the audit row disagrees with the cell it explains');
+    assert.match(String(sourceRow[srcCol.Review]), /Approved|NOT REVIEWED/, 'the audit row states the review state');
 
     const stored = recordByCompany.get(company).quotes[metricKey];
-    assert.equal(sourceRow[7], stored || DASH, 'the audit row does not carry the stored quote');
+    assert.equal(sourceRow[srcCol['Source Quote']], stored || DASH, 'the audit row does not carry the stored quote');
     if (stored) {
       assert.ok(comment.text.includes(stored), 'the comment shows the quote itself, not just a pointer');
     } else {
@@ -186,7 +207,7 @@ test('every populated Core Financials cell traces to a real Sources & Quotes row
       const value = core.aoa[row][col];
       if (value === DASH) continue;
       populated++;
-      const addr = `${String.fromCharCode(65 + col)}${row + 1}`;
+      const addr = `${colName(col)}${row + 1}`;
       assert.ok(commentByAddr.has(addr), `populated cell ${addr} has no source comment`);
     }
   }
@@ -196,13 +217,15 @@ test('every populated Core Financials cell traces to a real Sources & Quotes row
 
 test('Sources & Quotes reports how each quote verified', () => {
   const model = TyreCore.buildWorkbookModel(RECORDS);
-  const rows = sheet(model, 'Sources & Quotes').aoa.slice(1);
+  const aoa = sheet(model, 'Sources & Quotes').aoa;
+  const col = Object.fromEntries(aoa[0].map((name, i) => [name, i]));
+  const rows = aoa.slice(1);
   const fixtureIdByCompany = new Map(FIXTURES.map(([id, company]) => [company, id]));
 
   assert.ok(rows.length > 0);
   for (const row of rows) {
-    assert.equal(row[8], 'verified', `${row[0]} came from a verified fixture extraction`);
-    assert.equal(row[9], `fixture:${fixtureIdByCompany.get(row[1])}.txt`, 'the audit row names the filing it came from');
+    assert.equal(row[col.Verification], 'verified', `${row[0]} came from a verified fixture extraction`);
+    assert.equal(row[col.Source], `fixture:${fixtureIdByCompany.get(row[col.Company])}.txt`, 'the audit row names the filing it came from');
   }
 
   // A figure the extractor reported without a quote is still listed, flagged.
@@ -217,10 +240,12 @@ test('Sources & Quotes reports how each quote verified', () => {
     { source: 'manual' }
   );
   const flagged = TyreCore.buildWorkbookModel([unquoted]);
-  const row = sheet(flagged, 'Sources & Quotes').aoa[1];
+  const flaggedAoa = sheet(flagged, 'Sources & Quotes').aoa;
+  const fcol = Object.fromEntries(flaggedAoa[0].map((name, i) => [name, i]));
+  const row = flaggedAoa[1];
   assert.equal(row[0], 'Unquoted Co|Q1 FY26|revenue');
-  assert.equal(row[7], DASH);
-  assert.equal(row[8], 'unquoted');
+  assert.equal(row[fcol['Source Quote']], DASH);
+  assert.equal(row[fcol.Verification], 'unquoted');
 });
 
 test('reviewedOnly filters to approved records', () => {

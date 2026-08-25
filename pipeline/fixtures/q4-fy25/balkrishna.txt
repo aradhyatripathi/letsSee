@@ -1,0 +1,117 @@
+*** SYNTHETIC TEST DATA — fixture for offline pipeline runs. Not a real filing. ***
+
+BALKRISHNA INDUSTRIES LIMITED
+CIN: L99999MH1961PLC012185
+Registered Office: B-66, Waluj MIDC, Aurangabad 431 136, Maharashtra
+Corporate Office: BKT House, C/15 Trade World, Kamala Mills Compound, Mumbai 400 013
+
+AUDITED STANDALONE FINANCIAL RESULTS FOR THE QUARTER ENDED 31 MARCH 2025 (Q4 FY 2024-25)
+(INR in Crore, except earnings per share)
+
+                                                             Quarter ended Quarter ended Quarter ended
+Particulars                                                     31.03.2025    31.12.2024    31.03.2024
+                                                                 (Audited)   (Unaudited)     (Audited)
+------------------------------------------------------------------------------------------------------
+1   Revenue from operations                                       2,684.55      2,598.11      2,412.90
+2   Other income                                                     61.28         48.66         52.30
+3   Total income                                                  2,745.83      2,646.77      2,465.20
+4   Expenses
+    Cost of materials consumed                                    1,082.44      1,058.90        966.18
+    Purchases of stock-in-trade                                      14.92         13.04         11.88
+    Changes in inventories of finished goods and work-in-progress    18.36       (14.28)          9.44
+    Employee benefits expense                                       209.87        203.12        191.55
+    Finance costs                                                    22.44         23.15         25.02
+    Depreciation and amortisation expense                           168.15        164.88        158.44
+    Other expenses                                                  698.56        692.44        646.90
+    Total expenses                                                2,214.74      2,141.25      2,009.41
+5   Profit before tax                                               531.09        505.52        455.79
+6   Tax expense
+    Current tax                                                     140.55        133.80        120.44
+    Deferred tax                                                    (7.12)        (6.44)        (5.18)
+    Total tax expense                                               133.43        127.36        115.26
+7   Profit for the period                                           397.66        378.16        340.53
+8   Other comprehensive income (net of tax)                           7.85          5.02          6.11
+9   Total comprehensive income                                      405.51        383.18        346.64
+10  Paid-up equity share capital (face value INR 2 per share)        38.66         38.66         38.66
+11  Earnings per share (not annualised), basic and diluted (INR)     20.57         19.56         17.62
+------------------------------------------------------------------------------------------------------
+
+Note 4 — EBITDA
+EBITDA for the quarter ended 31 March 2025 was INR 660.40 Crore. The EBITDA margin for the
+quarter was 24.6% of revenue from operations. EBITDA excludes other income and is stated
+before finance costs, depreciation and amortisation, and tax.
+
+EXTRACT OF THE STATEMENT OF ASSETS AND LIABILITIES AS AT 31 MARCH 2025 (Audited)
+(INR in Crore)
+------------------------------------------------------------------------------------------------------
+Total assets                                                     13,908.44
+Total equity                                                     10,632.10
+Total liabilities                                                 3,276.34
+Total borrowings                                                  1,648.72
+Current assets                                                    6,601.28
+    Inventories                                                   2,355.90
+    Cash and cash equivalents, and current investments            2,318.44
+Current liabilities                                               2,142.55
+------------------------------------------------------------------------------------------------------
+
+RATIOS FOR THE QUARTER ENDED 31 MARCH 2025
+Debt-equity ratio                                                     0.16
+Current ratio                                                         3.08
+Quick ratio                                                           1.98
+Interest coverage ratio                                              21.94
+
+CASH FLOW EXTRACT FOR THE QUARTER ENDED 31 MARCH 2025 (Audited) (INR in Crore)
+------------------------------------------------------------------------------------------------------
+Net cash generated from operating activities                        622.85
+Payments for property, plant and equipment (capital expenditure)    388.40
+Free cash flow (operating cash flow less capital expenditure)       234.45
+Dividend paid                                                     (115.98)
+------------------------------------------------------------------------------------------------------
+
+SEGMENT NOTE — QUARTER ENDED 31 MARCH 2025
+The Company operates in a single reportable segment, being the manufacture and sale of
+off-highway tyres. Supplementary channel and category information for the quarter is set
+out below.
+
+Sales by channel (share of revenue from operations):
+    Replacement                                                        76%
+    Original equipment                                                 24%
+
+Sales by product category (share of revenue from operations):
+    Off-highway tyres (OHT), comprising agricultural, industrial,
+      construction, earthmover and all-terrain                         89%
+    Truck and bus radial (TBR)                                          5%
+    Truck and bus bias (TBB)                                            3%
+    Others, including tubes and mining tracks                           3%
+
+Sales by geography (share of revenue from operations):
+    India                                                              25%
+    Europe                                                             33%
+    Americas                                                           27%
+    Rest of the world                                                  15%
+
+MANAGEMENT COMMENTARY
+Volumes for the quarter were 79,148 tonnes, up 9.2% year on year, the highest quarterly
+despatch the Company has recorded, helped by restocking at European distributors ahead of
+the spring season and by a firmer order book in the all-terrain and mining categories in
+the Americas. Natural rubber prices eased through the quarter from the peaks seen in the
+December quarter, and the Company drew down higher-cost inventory carried into January, so
+the blended raw-material cost per tonne fell sequentially; carbon black and synthetic
+rubber were broadly flat. Freight rates on the Europe lane also softened, which the
+Company has retained rather than passed on. Realisations declined marginally on a richer
+mix of larger-rim agricultural sizes carrying lower per-kilogram pricing.
+
+Capital expenditure for the quarter was INR 388.40 Crore, spent principally on the Bhuj
+mixing and curing lines, on the first phase of the carbon black plant, and on the captive
+solar and wind capacity being added at Bhuj and Waluj. Capital expenditure for FY25 as a
+whole was within the INR 1,400 Crore to INR 1,600 Crore range indicated at the start of
+the year and was met entirely from internal accruals.
+
+The audited financial results were reviewed by the Audit Committee and approved by the
+Board of Directors at its meeting held on 15 May 2025. The statutory auditors have issued
+an unmodified audit opinion on these results.
+
+For Balkrishna Industries Limited
+Joint Managing Director
+Mumbai
+15 May 2025

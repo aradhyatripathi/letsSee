@@ -4,13 +4,21 @@
   "private": true,
   "type": "module",
   "description": "Manually-triggered, human-reviewed extraction pipeline for Indian tyre-sector quarterly filings, with an Excel workbook and grounded Q&A over the reviewed records.",
-  "engines": { "node": ">=20" },
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "run:pipeline": "node pipeline/run.mjs",
     "sync:core": "node scripts/sync-core.mjs",
     "check:core": "node scripts/sync-core.mjs --check",
     "serve:dashboard": "node scripts/serve.mjs",
-    "test": "node --test \"test/*.test.mjs\""
+    "test": "node --test test/*.test.mjs",
+    "deck": "node pipeline/deck.mjs",
+    "archive": "node pipeline/archive.mjs",
+    "demo": "node scripts/demo.mjs",
+    "workbook": "node pipeline/workbook.mjs",
+    "test:browser": "node --test test/browser.test.mjs",
+    "pin:cdn": "node scripts/pin-cdn.mjs"
   },
   "license": "MIT"
 }

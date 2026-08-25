@@ -1,19 +1,17 @@
 // Section 3 — Companies & Filing Scope.
 //
-// The spec names Apollo Tyres, MRF, CEAT and JK Tyre explicitly and says the
-// remaining five "likely include Balkrishna Industries, TVS Srichakra, Goodyear
-// India, and 1-2 more depending on what 'tyre sector' was scoped to mean; use
-// whichever list your manager actually referenced."
+// The spec names Apollo Tyres, MRF, CEAT and JK Tyre explicitly and suggests
+// Balkrishna Industries, TVS Srichakra and Goodyear India for the rest, "use
+// whichever list your manager actually referenced." That is these seven.
 //
-// The four named companies are certain. Balkrishna, TVS Srichakra and Goodyear
-// India are the spec's own suggestions. The last two are this file's inference
-// from the listed Indian tyre universe and are marked `confirmed: false` — they
-// are the ones to check against the original scoping note before a real run.
-// Changing the roster means editing this list and nothing else — nothing in the
-// pipeline, the dashboard or the tests assumes a count. Add or remove entries
-// freely; the only follow-up is a fixture per new company id
-// (pipeline/fixtures/<id>.txt) so offline runs keep covering it, which the test
-// suite will tell you about by name if you forget.
+// An earlier revision carried two more (Modi Rubber, PTL Enterprises) inferred
+// to reach a count of nine. They were dropped as too small to be relevant to the
+// comparison this pipeline exists to produce. The count is not load-bearing:
+// changing the roster means editing this list and nothing else — nothing in the
+// pipeline, the dashboard or the tests assumes a number. Add or remove entries
+// freely; the only follow-up is a fixture per new company id in each quarter
+// directory (pipeline/fixtures/<quarter-slug>/<id>.txt) so offline runs keep
+// covering it, which the test suite will tell you about by name if you forget.
 //
 // `sources` is ordered: the pipeline tries each in turn and records which one
 // worked, so a company whose IR page is awkward does not block the rest.
@@ -96,28 +94,6 @@ export const COMPANIES = [
     sources: [
       { type: 'ir', url: 'https://www.goodyear.co.in/investor-relations' },
       { type: 'nse', url: 'https://www.nseindia.com/get-quotes/equity?symbol=GOODYEAR' }
-    ]
-  },
-  {
-    id: 'modirubber',
-    name: 'Modi Rubber',
-    nse: 'MODIRUBBER',
-    bse: '500890',
-    confirmed: false,
-    note: 'Inferred to complete the nine — confirm against the original scoping note.',
-    sources: [
-      { type: 'bse', url: 'https://www.bseindia.com/stock-share-price/modi-rubber-ltd/modirubber/500890/financials-results/' }
-    ]
-  },
-  {
-    id: 'ptlenterprises',
-    name: 'PTL Enterprises',
-    nse: 'PTL',
-    bse: '509220',
-    confirmed: false,
-    note: 'Inferred to complete the nine — confirm against the original scoping note.',
-    sources: [
-      { type: 'bse', url: 'https://www.bseindia.com/stock-share-price/ptl-enterprises-ltd/ptl/509220/financials-results/' }
     ]
   }
 ];

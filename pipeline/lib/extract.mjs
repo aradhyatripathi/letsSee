@@ -16,8 +16,16 @@
 import { callMessages, DEFAULT_MODEL } from './anthropic.mjs';
 import { TyreCore } from './core.mjs';
 
-const EXTRACTION_MAX_TOKENS = 8000;
+// Twenty-one figures each with an exact quote is a long answer, and a response
+// cut off at the limit is unrecoverable JSON rather than a partial record. The
+// budget is only spent if it is used, so it is set well clear of the need.
+const EXTRACTION_MAX_TOKENS = 16000;
+
+// Adaptive thinking. These filings put three or four comparative columns side by
+// side and the failure this whole design guards against is reading the wrong one.
+const EXTRACTION_THINKING = { type: 'adaptive' };
 const OFFLINE_EXTRACTOR = 'offline-regex';
+const MANUAL_EXTRACTOR = 'claude-manual';
 
 /**
  * Extract one filing with Claude, verifying every quote against the source text.
@@ -32,7 +40,8 @@ const OFFLINE_EXTRACTOR = 'offline-regex';
  * @param {string} [options.source]       Where the text came from; stored on the record.
  * @param {string} [options.apiKey]       Falls back to ANTHROPIC_API_KEY.
  * @param {string} [options.model]        Default claude-sonnet-4-6.
- * @param {number} [options.maxTokens]    Output budget, default 8000.
+ * @param {number} [options.maxTokens]    Output budget, default 16000.
+ * @param {object|null} [options.thinking] Adaptive thinking; null disables it.
  * @param {number} [options.retries]      Re-extractions after a quote-verification
  *                                        failure, default 1.
  * @param {string} [options.retrievedAt]  ISO timestamp of retrieval; defaults to now.
@@ -50,6 +59,7 @@ export async function extractRecord({
   apiKey = null,
   model = DEFAULT_MODEL,
   maxTokens = EXTRACTION_MAX_TOKENS,
+  thinking = EXTRACTION_THINKING,
   retries = 1,
   retrievedAt = null,
   timeoutMs = undefined,
@@ -93,6 +103,7 @@ export async function extractRecord({
         system: prompt.system,
         user: correction ? `${prompt.user}\n\n${correction}` : prompt.user,
         maxTokens,
+        thinking,
         timeoutMs,
         signal
       });
@@ -143,15 +154,15 @@ export async function extractRecord({
         return result;
       }
 
-      const unfound = verification.checks.filter((c) => c.status === 'not_found');
-      attempt.error = `quotes not found in the source: ${unfound.map((c) => c.key).join(', ')}`;
-      correction = buildCorrection(unfound, verification.threshold);
+      const unverified = verification.checks.filter((c) => c.status !== 'verified');
+      attempt.error = describeChecks(unverified);
+      correction = buildCorrection(unverified, verification.threshold);
     }
 
-    const failing = result.verification.checks.filter((c) => c.status === 'not_found').map((c) => c.key);
+    const unverified = result.verification.checks.filter((c) => c.status !== 'verified');
     result.error =
       `${who}: quote verification failed after ${totalAttempts} attempt${totalAttempts === 1 ? '' : 's'} — ` +
-      `no source span could be found for ${failing.join(', ')}. The record is attached unaccepted; ` +
+      `${describeChecks(unverified)}. The record is attached unaccepted; ` +
       're-run this company, or extract it by hand.';
     return result;
   } catch (err) {
@@ -235,8 +246,8 @@ export function extractRecordOffline({ sourceText, company, quarter, source = nu
     });
 
     if (!verification.ok) {
-      const failing = verification.checks.filter((c) => c.status === 'not_found').map((c) => c.key);
-      result.error = `${who}: offline quote verification failed for ${failing.join(', ')} — the extraction patterns are matching text that is not in the filing`;
+      const unverified = verification.checks.filter((c) => c.status !== 'verified');
+      result.error = `${who}: offline quote verification failed — ${describeChecks(unverified)}. The extraction patterns are matching text that is not in the filing`;
       return result;
     }
 
@@ -244,6 +255,135 @@ export function extractRecordOffline({ sourceText, company, quarter, source = nu
     return result;
   } catch (err) {
     result.error = `${who}: offline extraction failed: ${err.message}`;
+    return result;
+  }
+}
+
+/**
+ * Ingest a model response that was obtained by hand instead of over HTTP.
+ *
+ * The key arrives only after the project is approved, so the API route cannot be
+ * exercised yet. This is the way around that without loosening anything: the
+ * pipeline prints the real prompt (`--emit-prompt`), a person pastes it into a
+ * Claude chat along with the real filing, and pastes the JSON answer back here.
+ * The person is the transport; nothing else changes. The response goes through
+ * the same parseModelJSON -> recToStoredShape -> validateStored -> verifyQuotes
+ * path as an API answer, verified against the same retrieved text, so a quote
+ * this route cannot find in the filing is rejected exactly as it would be live.
+ *
+ * The record is stamped `claude-manual` rather than `claude:<model>` so a reader
+ * can always tell which records crossed the network and which were carried.
+ *
+ * @param {object} options
+ * @param {string} options.sourceText    The retrieved filing text to verify against.
+ * @param {string} options.responseText  The model's raw answer, fenced or bare.
+ * @param {string} options.company
+ * @param {string} options.quarter
+ * @param {string} [options.source]
+ * @param {string} [options.retrievedAt]
+ * @param {string} [options.origin]      Free note on where the answer came from.
+ * @returns {{ok:boolean, record:(object|null), verification:(object|null),
+ *            raw:(string|null), attempts:Array<object>, error:(string|null),
+ *            selection:null, extractor:string}}
+ */
+export function extractRecordFromResponse({
+  sourceText,
+  responseText,
+  company,
+  quarter,
+  source = null,
+  retrievedAt = null,
+  origin = 'pasted response'
+} = {}) {
+  const who = describe(company, quarter);
+  const extractor = MANUAL_EXTRACTOR;
+  const result = {
+    ok: false,
+    record: null,
+    verification: null,
+    raw: null,
+    attempts: [],
+    error: null,
+    selection: null,
+    extractor
+  };
+
+  try {
+    const text = String(sourceText ?? '');
+    if (!text.trim()) {
+      result.error = `${who}: no source text to verify the response against`;
+      return result;
+    }
+    const answer = String(responseText ?? '');
+    if (!answer.trim()) {
+      result.error = `${who}: the response file is empty`;
+      return result;
+    }
+    result.raw = answer;
+
+    let parsed;
+    try {
+      parsed = TyreCore.parseModelJSON(answer);
+    } catch (err) {
+      result.attempts.push({ n: 1, extractor, origin, ok: false, verification: null, error: err.message });
+      result.error =
+        `${who}: could not read JSON from the response (${err.message}). ` +
+        'Paste the whole JSON object the model returned, including its braces — a code fence around it is fine.';
+      return result;
+    }
+
+    // Carrying answers by hand means answers get carried to the wrong place. Pasting
+    // MRF's answer into an Apollo run used to store an MRF record whose quotes had been
+    // verified against Apollo's filing, and every count in the run report agreed with
+    // itself. The prompt does invite the model to correct the company and quarter it was
+    // given, so the comparison is loose — it catches a different filing, not a tidier
+    // spelling of the same one.
+    const mismatch = describeMismatch(parsed, company, quarter);
+    if (mismatch) {
+      result.attempts.push({ n: 1, extractor, origin, ok: false, verification: null, error: mismatch });
+      result.error = `${who}: ${mismatch}`;
+      return result;
+    }
+
+    const { record, problems, verification } = toVerifiedRecord({
+      parsed,
+      sourceText: text,
+      source,
+      retrievedAt: retrievedAt || new Date().toISOString(),
+      extractor
+    });
+    result.record = record;
+
+    if (problems.length) {
+      result.attempts.push({ n: 1, extractor, origin, ok: false, verification: null, error: problems.join('; ') });
+      result.error = `${who}: the pasted record is not well-formed: ${problems.join('; ')}`;
+      return result;
+    }
+
+    result.verification = verification;
+    result.attempts.push({
+      n: 1,
+      extractor,
+      origin,
+      ok: verification.ok,
+      verification: summarise(verification),
+      error: verification.ok ? null : 'quotes not found in the source'
+    });
+
+    if (!verification.ok) {
+      const unverified = verification.checks.filter((c) => c.status !== 'verified');
+      result.error =
+        `${who}: ${describeChecks(unverified)}. The record is attached unaccepted.\n` +
+        `${buildCorrection(unverified, verification.threshold)}\n` +
+        'Paste that correction back into the same chat, save the new answer, and re-run. ' +
+        'If it repeats, check the filing text in the chat is the one named by --file.';
+      return result;
+    }
+
+    result.ok = true;
+    return result;
+  } catch (err) {
+    result.error = `${who}: reading the pasted response failed: ${err.message}`;
     return result;
   }
 }
@@ -272,6 +412,50 @@ function summarise(verification) {
   };
 }
 
+// One sentence naming which fields failed and why, grouped by cause. "quotes not found
+// in the source" was printed for every kind of failure, including a quote that is in the
+// filing word for word but does not contain the figure it was offered for — which sent
+// the reader looking for the wrong problem.
+const CHECK_LABELS = {
+  not_found: 'no matching span in the filing',
+  value_not_in_quote: 'the quote is in the filing but does not contain the figure',
+  quote_too_long: 'a section of the filing was returned instead of the line reporting the figure',
+  unquoted: 'a figure was reported with no quote at all'
+};
+
+function describeChecks(checks) {
+  const byStatus = new Map();
+  for (const c of checks) {
+    if (!byStatus.has(c.status)) byStatus.set(c.status, []);
+    byStatus.get(c.status).push(c.key);
+  }
+  if (!byStatus.size) return 'quote verification failed with nothing recorded';
+  return [...byStatus.entries()]
+    .map(([status, keys]) => `${keys.join(', ')} — ${CHECK_LABELS[status] || status}`)
+    .join('; ');
+}
+
+/** Loose comparison: a tidier spelling is fine, a different filing is not. */
+function looseMatch(a, b) {
+  const norm = (v) => String(v == null ? '' : v).toLowerCase().replace(/[^a-z0-9]/g, '');
+  const x = norm(a);
+  const y = norm(b);
+  if (!x || !y) return true;
+  return x === y || x.includes(y) || y.includes(x);
+}
+
+function describeMismatch(parsed, company, quarter) {
+  const reasons = [];
+  if (!looseMatch(parsed.company, company)) {
+    reasons.push(`the answer is for ${JSON.stringify(parsed.company)}, not ${JSON.stringify(company)}`);
+  }
+  if (quarter && parsed.quarter && !looseMatch(parsed.quarter, quarter)) {
+    reasons.push(`it reports ${JSON.stringify(parsed.quarter)}, not ${JSON.stringify(quarter)}`);
+  }
+  if (!reasons.length) return null;
+  return `${reasons.join(' and ')} — its quotes would have been checked against a different filing, so it was not stored`;
+}
+
 function describe(company, quarter) {
   return [company, quarter].filter(Boolean).join(' ') || 'unknown filing';
 }
@@ -279,14 +463,25 @@ function describe(company, quarter) {
 // Re-sent as an appendix to the original prompt rather than as a second turn:
 // these models reject an assistant prefill, and a stateless re-ask keeps the
 // source text and the schema in front of the model alongside the correction.
-function buildCorrection(unfound, threshold) {
-  const lines = unfound.map(
-    (c) => `  - ${c.key}: ${JSON.stringify(c.quote)} — matched only ${Math.round(c.score * 100)}% of the source wording`
-  );
+function buildCorrection(problems, threshold) {
+  const lines = problems.map((c) => {
+    if (c.status === 'unquoted') {
+      return `  - ${c.key}: reported as ${c.value} with no quote at all`;
+    }
+    if (c.status === 'value_not_in_quote') {
+      return `  - ${c.key}: reported as ${c.value}, but ${JSON.stringify(c.quote)} does not contain that figure` +
+        ' (this is usually the wrong comparative column)';
+    }
+    if (c.status === 'quote_too_long') {
+      return `  - ${c.key}: ${c.detail || `the quote is ${c.quote.length} characters`}. Quote the single line that` +
+        ` reports the figure, at most ${TyreCore.MAX_QUOTE_CHARS} characters.`;
+    }
+    return `  - ${c.key}: ${JSON.stringify(c.quote)} — matched only ${Math.round(c.score * 100)}% of the source wording`;
+  });
   return [
     'CORRECTION — your previous answer was rejected before it was stored.',
     '',
-    `Every quote is checked against the filing text above; these did not reach the ${Math.round(threshold * 100)}% match required:`,
+    `Every figure must carry a short quote that is in the filing text above and that contains the figure itself; these did not (match threshold ${Math.round(threshold * 100)}%, quote limit ${TyreCore.MAX_QUOTE_CHARS} characters):`,
     ...lines,
     '',
     'Re-extract the whole object. For each field listed, either copy an exact span from',

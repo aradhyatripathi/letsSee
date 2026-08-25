@@ -8,10 +8,11 @@
 // Retrieval is only ever entered because a person triggered a run (Section 0,
 // boundary 1). There is nothing in this module that starts itself.
 
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
-import { extname, join, resolve } from 'node:path';
+import { mkdir, readFile, stat, writeFile } from 'node:fs/promises';
+import { basename, extname, join, resolve } from 'node:path';
 
 import { fixturePath } from '../fixtures/index.mjs';
+import { TyreCore } from './core.mjs';
 import { extractPdfText, looksLikePdf } from './pdf.mjs';
 
 const FIRECRAWL_ENDPOINT = 'https://api.firecrawl.dev/v1/scrape';
@@ -25,6 +26,22 @@ const USER_AGENT =
 // JavaScript shell — worth failing over to the next strategy rather than sending
 // it to the extractor.
 const MIN_USEFUL_CHARS = 400;
+
+// The most we will pull off the wire, or off disk, for one filing.
+//
+// run.mjs promises that a failure on one company is recorded and the run
+// continues — "one awkward investor-relations page must never cost the other
+// eight". That promise does not survive an unbounded read: the whole response was
+// buffered before anything looked at its size, so 200 MB from a hostile or merely
+// broken IR page became about 7 GB of resident memory once the string copies in
+// htmlToText were counted, and the process aborted. A heap abort is not an
+// exception; no per-company try/catch sees it, and records.json and report.md are
+// never written at all. Refusing the read fails one company, which is the
+// behaviour that was promised.
+//
+// 64 MB is far above a real filing. A 200-page annual report PDF runs around
+// 30 MB, and a results page is a few hundred kilobytes.
+const MAX_SOURCE_BYTES = 64 * 1024 * 1024;
 
 const TEXT_EXTENSIONS = new Set(['.txt', '.md', '.text', '']);
 
@@ -73,7 +90,7 @@ export async function retrieveFiling(company, options = {}) {
 
   let plan;
   try {
-    plan = planStrategies(company, { mode, file, firecrawlKey });
+    plan = planStrategies(company, { mode, file, firecrawlKey, quarter });
   } catch (err) {
     result.error = err.message;
     return result;
@@ -91,10 +108,18 @@ export async function retrieveFiling(company, options = {}) {
         ms: Date.now() - startedAt
       });
       result.ok = true;
-      result.text = got.text;
+      // One place for every strategy. A PDF text string may be UTF-16BE, and decoding it
+      // code unit by code unit turns the byte pair FF FF in a filing into U+FFFF — a
+      // character XML cannot carry, which would travel into a quote and then into a
+      // workbook or a deck part and quietly truncate it.
+      result.text = TyreCore.sanitizeText(got.text);
       result.source = got.source;
       result.strategy = step.strategy;
       result.bytes = got.bytes;
+      // Kept beside the run, not on the record: a run should be able to say exactly
+      // which file on this machine it read, and a deck sent outside the team should
+      // not carry the operator's home directory.
+      if (got.path) result.local_path = got.path;
       break;
     } catch (err) {
       result.attempts.push({
@@ -108,7 +133,7 @@ export async function retrieveFiling(company, options = {}) {
   }
 
   if (!result.ok) {
-    result.error = summariseFailure(company, result.attempts, mode);
+    result.error = summariseFailure(company, result.attempts, mode, quarter);
     return result;
   }
 
@@ -126,7 +151,7 @@ export async function retrieveFiling(company, options = {}) {
 
 /* ---------------------------------------------------------------- planning -- */
 
-function planStrategies(company, { mode, file, firecrawlKey }) {
+function planStrategies(company, { mode, file, firecrawlKey, quarter }) {
   if (mode !== 'fixture' && mode !== 'live') {
     throw new Error(`unknown retrieval mode '${mode}' (expected 'fixture' or 'live')`);
   }
@@ -135,7 +160,7 @@ function planStrategies(company, { mode, file, firecrawlKey }) {
   if (file) plan.push({ strategy: 'file', target: resolve(file), file: resolve(file) });
 
   if (mode === 'fixture') {
-    plan.push({ strategy: 'fixture', target: fixturePath(company.id) });
+    plan.push({ strategy: 'fixture', target: fixturePath(company.id, quarter) });
     return plan;
   }
 
@@ -164,11 +189,11 @@ function runStrategy(step, ctx) {
   }
 }
 
-function summariseFailure(company, attempts, mode) {
+function summariseFailure(company, attempts, mode, quarter) {
   const detail = attempts.map((a) => `${a.strategy} (${a.target}): ${a.error}`).join('; ');
   const hint = mode === 'live'
     ? ' — download the filing by hand and re-run with a --file path for this company'
-    : ` — expected a fixture at ${fixturePath(company.id)}`;
+    : ` — expected a fixture at ${fixturePath(company.id, quarter)}`;
   return `${company.name}: every retrieval strategy failed. ${detail}${hint}`;
 }
 
@@ -178,17 +203,46 @@ async function fromFixture(path) {
   const buf = await readFile(path);
   const text = buf.toString('utf8');
   if (!text.trim()) throw new Error(`fixture ${path} is empty`);
-  return { text, bytes: buf.length, source: `fixture:${path.split(/[\\/]/).pop()}` };
+  // Quarter and file, not just the file: two quarters of the same company are both
+  // `ceat.txt`, and a record whose source cannot say which one it came from is not
+  // traceable.
+  const parts = path.split(/[\\/]/).slice(-2);
+  return { text, bytes: buf.length, source: `fixture:${parts.join('/')}` };
+}
+
+/**
+ * What a record says a manual upload came from.
+ *
+ * The filename, not the path. `source` is stored on every record and travels: onto
+ * the review card, into the deck's footnote, into the workbook's Source column, into
+ * the archive that gets committed, and into every Q&A payload sent to Anthropic. An
+ * absolute path carries the operator's username, their home-directory layout and
+ * whatever the client folder is called — none of which is about the filing, and all
+ * of which then leaves with a deck sent to people outside the team.
+ *
+ * The full path is not lost: it is in the run directory's retrieval record, which is
+ * gitignored working space for the run that is happening now. That is the same split
+ * boundary 2 draws everywhere else — what a run knows, versus what leaves it.
+ */
+function fileSourceLabel(path) {
+  return `file:${basename(path)}`;
 }
 
 async function fromFile(path) {
+  const { size } = await stat(path);
+  if (size > MAX_SOURCE_BYTES) {
+    throw new Error(
+      `${path} is ${(size / (1024 * 1024)).toFixed(1)} MB, past the ${Math.round(MAX_SOURCE_BYTES / (1024 * 1024))} MB limit for one filing — ` +
+      'save just the financial-statement pages, or paste the text into a .txt'
+    );
+  }
   const buf = await readFile(path);
   const ext = extname(path).toLowerCase();
 
   if (ext === '.pdf' || looksLikePdf(buf)) {
     const parsed = extractPdfText(buf);
     if (!parsed.ok) throw new Error(`${path}: ${parsed.error}`);
-    return { text: parsed.text, bytes: buf.length, source: `file:${path}` };
+    return { text: parsed.text, bytes: buf.length, source: fileSourceLabel(path), path: path };
   }
 
   if (!TEXT_EXTENSIONS.has(ext)) {
@@ -197,7 +251,7 @@ async function fromFile(path) {
 
   const text = buf.toString('utf8');
   if (!text.trim()) throw new Error(`${path} is empty`);
-  return { text, bytes: buf.length, source: `file:${path}` };
+  return { text, bytes: buf.length, source: fileSourceLabel(path), path: path };
 }
 
 async function fromFirecrawl(url, key, timeoutMs) {
@@ -207,7 +261,9 @@ async function fromFirecrawl(url, key, timeoutMs) {
     body: JSON.stringify({ url, formats: ['markdown'] })
   }, timeoutMs);
 
-  const body = await res.text();
+  // Firecrawl is a third party returning us a document, so its response is bounded
+  // like any other. It has never sent anything close to this.
+  const body = (await readCapped(res, FIRECRAWL_ENDPOINT, MAX_SOURCE_BYTES)).toString('utf8');
   if (!res.ok) {
     throw new Error(`firecrawl returned HTTP ${res.status} for ${url}: ${clip(body, 300)}`);
   }
@@ -250,7 +306,7 @@ async function fromHttp(url, timeoutMs) {
 
   if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText || ''} for ${url}`.trim());
 
-  const buf = Buffer.from(await res.arrayBuffer());
+  const buf = await readCapped(res, url, MAX_SOURCE_BYTES);
   const contentType = (res.headers.get('content-type') || '').toLowerCase();
 
   if (contentType.includes('pdf') || looksLikePdf(buf)) {
@@ -272,6 +328,42 @@ async function fromHttp(url, timeoutMs) {
   }
 
   return { text, bytes: buf.length, source: url };
+}
+
+/**
+ * Read a response body, stopping at `limit` rather than after it.
+ *
+ * `res.arrayBuffer()` has already allocated everything by the time it returns, so
+ * a check on the result is a check made too late. This reads the stream and gives
+ * up the moment the total passes the limit — the declared Content-Length is used
+ * only as an early exit, because a server is free to lie about it or omit it.
+ */
+async function readCapped(res, url, limit) {
+  const tooBig = (size) => new Error(
+    `${url} returned ${(size / (1024 * 1024)).toFixed(1)} MB, past the ${Math.round(limit / (1024 * 1024))} MB limit for one filing — ` +
+    'point the source at the results PDF or the filing page rather than a whole archive, or download it and re-run with --file'
+  );
+
+  const declared = Number(res.headers.get('content-length'));
+  if (Number.isFinite(declared) && declared > limit) throw tooBig(declared);
+  if (!res.body) return Buffer.from(await res.arrayBuffer());
+
+  const reader = res.body.getReader();
+  const chunks = [];
+  let total = 0;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > limit) throw tooBig(total);
+      chunks.push(value);
+    }
+  } finally {
+    // Let the socket go whether we finished or walked away from it.
+    await reader.cancel().catch(() => {});
+  }
+  return Buffer.concat(chunks);
 }
 
 async function request(url, init, timeoutMs) {

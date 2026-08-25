@@ -1,0 +1,120 @@
+*** SYNTHETIC TEST DATA — fixture for offline pipeline runs. Not a real filing. ***
+
+APOLLO TYRES LIMITED
+CIN: L25111KL1972PLC002449
+Registered Office: 3rd Floor, Areekal Mansion, Panampilly Nagar, Kochi 682 036, Kerala
+Website: corporate.apollotyres.com
+
+STATEMENT OF AUDITED CONSOLIDATED FINANCIAL RESULTS
+FOR THE QUARTER ENDED 31 MARCH 2025 (Q4 FY25)
+(All amounts in INR Crore, except per share data)
+
+                                                    Quarter ended    Quarter ended    Quarter ended
+Particulars                                          31.03.2025       31.12.2024       31.03.2024
+                                                      (Audited)       (Unaudited)       (Audited)
+--------------------------------------------------------------------------------------------------
+1   Revenue from operations                             6,122.18         6,242.55         6,010.88
+2   Other income                                           38.90            40.12            34.28
+3   Total income (1+2)                                  6,161.08         6,282.67         6,045.16
+4   Expenses
+    (a) Cost of materials consumed                      3,354.95         3,402.18         3,180.44
+    (b) Purchases of stock-in-trade                       244.89           251.33           232.10
+    (c) Changes in inventories of finished goods,
+        work-in-progress and stock-in-trade                12.05           (24.60)            8.66
+    (d) Employee benefits expense                         673.44           665.20           631.55
+    (e) Finance costs                                      72.18            74.55            82.40
+    (f) Depreciation and amortisation expense             349.12           344.86           328.94
+    (g) Other expenses                                    994.30         1,012.44           941.20
+    Total expenses                                      5,700.93         5,725.96         5,405.29
+5   Profit before tax (3-4)                               460.15           556.71           639.87
+6   Tax expense
+    (a) Current tax                                       128.90           158.20           168.44
+    (b) Deferred tax                                       (7.42)           (9.85)           (5.10)
+    Total tax expense                                     121.48           148.35           163.34
+7   Profit for the period (5-6)                           338.67           408.36           476.53
+8   Other comprehensive income (net of tax)                 9.44             6.72            (3.28)
+9   Total comprehensive income (7+8)                      348.11           415.08           473.25
+10  Paid-up equity share capital
+    (face value INR 1 per share)                           63.53            63.53            63.53
+11  Earnings per share (not annualised)
+    Basic and diluted (INR)                                 5.33             6.43             7.50
+--------------------------------------------------------------------------------------------------
+
+Note 3 — EBITDA
+EBITDA for the quarter ended 31 March 2025 stood at INR 842.55 Crore, representing an
+EBITDA margin of 13.8% of revenue from operations (Q3 FY25: INR 936.00 Crore, 15.0%;
+Q4 FY24: INR 1,016.93 Crore, 16.9%). EBITDA is computed as profit before tax adjusted
+for finance costs, depreciation and amortisation expense and other income.
+
+EXTRACT FROM THE STATEMENT OF ASSETS AND LIABILITIES AS AT 31 MARCH 2025 (Audited)
+(INR Crore)
+--------------------------------------------------------------------------------------------------
+Total assets                                           24,512.08
+Total equity                                           13,918.44
+Total liabilities                                      10,593.64
+Of which:
+    Total borrowings (current and non-current)          3,344.72
+    Trade payables                                      3,390.55
+Current assets                                          8,206.19
+    Of which inventories                                3,838.90
+    Of which trade receivables                          2,102.66
+    Of which cash and cash equivalents                  1,844.28
+Current liabilities                                     7,058.41
+--------------------------------------------------------------------------------------------------
+
+KEY RATIOS FOR THE QUARTER
+Debt-equity ratio                                            0.24
+Current ratio                                                1.16
+Quick ratio                                                  0.62
+Interest coverage ratio                                      6.84
+Inventory turnover ratio (annualised)                        3.76 times
+Debtor days (DSO)                                              31 days
+Creditor days (DPO)                                            84 days
+
+EXTRACT FROM THE STATEMENT OF CASH FLOWS FOR THE QUARTER ENDED 31 MARCH 2025 (Audited)
+(INR Crore)
+--------------------------------------------------------------------------------------------------
+Net cash generated from operating activities              1,046.72
+Purchase of property, plant and equipment (capital expenditure)  468.55
+Free cash flow (operating cash flow less capital expenditure)    578.17
+Net cash used in financing activities                      (352.10)
+--------------------------------------------------------------------------------------------------
+
+SEGMENT AND CHANNEL NOTE (Q4 FY25)
+Revenue from operations by sales channel:
+    Replacement                                              69%
+    Original equipment (OEM)                                 20%
+    Exports                                                  11%
+Revenue from operations by product category:
+    Truck and bus radial (TBR)                               32%
+    Truck and bus bias (TBB)                                  6%
+    Passenger car radial (PCR)                               33%
+    Two-wheeler (2W)                                          8%
+    Off-highway tyres (OHT)                                  13%
+    Others, including tubes and flaps                         8%
+
+MANAGEMENT COMMENTARY
+The March quarter closed the financial year with firm demand in the domestic replacement
+channel, where farm and passenger vehicle fitments both added volume, while original
+equipment offtake was broadly flat as commercial vehicle build rates stayed range-bound
+through the quarter. Natural rubber prices eased from their December peak as Thai and
+Indonesian supply normalised, but carbon black and synthetic rubber held above year-ago
+levels, so the raw material basket was only marginally lighter sequentially and gross
+margin finished about 40 basis points below the December quarter. The Company carried a
+full-quarter benefit of the replacement-channel price increases taken in January 2025 and
+expects input costs to stay broadly stable into the June quarter.
+
+Capital expenditure for the quarter was INR 468.55 Crore, spent largely on the truck and
+bus radial line at Chennai and on the captive renewable capacity commissioned during the
+quarter. Full-year capital expenditure for FY25 was INR 1,742.30 Crore, within the range
+guided at the start of the year, and the Board has approved a comparable outlay for FY26
+to be met from internal accruals.
+
+The above results were reviewed by the Audit Committee and approved by the Board of
+Directors at its meeting held on 9 May 2025. The statutory auditors have carried out an
+audit of these results and have issued an unmodified opinion.
+
+For and on behalf of the Board of Directors
+Managing Director
+Place: Gurugram
+Date: 9 May 2025

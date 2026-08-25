@@ -1,0 +1,38 @@
+# The two checks that catch the failures this repo is actually prone to.
+#
+# `npm test` covers the contract, the quote gate and the file formats. The core
+# sync check is separate because its failure mode is the quiet one: the dashboard
+# holds an inlined copy of the shared source files, and a hand-edit there would
+# leave the browser and the CLI silently disagreeing about what a record is.
+#
+# Nothing here needs a key or a network. The whole suite runs against synthetic
+# fixtures, which is the point — a reviewer can check this out and verify it with
+# no credentials at all.
+
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # 20 is the floor package.json declares; 22 is what development uses.
+        node: ['20', '22']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+      - name: Shared source blocks match the dashboard's inlined copies
+        run: npm run check:core
+      - name: Test
+        run: npm test
