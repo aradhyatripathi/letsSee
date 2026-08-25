@@ -177,3 +177,65 @@ test('the workbook needs no library — only the shared ZIP writer', async () =>
   assert.ok(!/\bXLSX\.(utils|writeFile|write)\b/.test(html), 'and no longer calls one');
   assert.match(html, /TyreXlsx\.writeXlsx\(model\)/, 'it writes the workbook itself');
 });
+
+// Excel's hard limit is 32,767 characters in a cell. Past it, it does not refuse the
+// file — it opens it, says it repaired unreadable content, and drops what it did not
+// like. Records are bounded where they are stored as well; this is the last line
+// before bytes, and a format guarantee should not depend on an upstream step running.
+test('no cell is longer than Excel will accept', () => {
+  const long = 'the group continues to expand capacity. '.repeat(12000);
+  assert.ok(long.length > 400000);
+
+  assert.ok(TyreXlsx.clip(long).length <= TyreXlsx.MAX_CELL_CHARS);
+  assert.match(TyreXlsx.clip(long), /…\[clipped]$/, 'and a reader can tell it was cut');
+  assert.equal(TyreXlsx.clip('short'), 'short', 'anything that fits is untouched');
+
+  // Written straight into a model, so the writer's own clip is what is under test.
+  // Going through recToStoredShape would not exercise it: records are bounded at
+  // 4,000 characters upstream, so the cell limit would never be reached and this
+  // would pass with the writer's clip deleted.
+  const files = unzip(TyreXlsx.writeXlsx({
+    sheets: [{ name: 'Outlook', aoa: [['Company', 'Commentary'], ['Apollo Tyres', long]] }],
+    comments: [{ sheet: 'Outlook', addr: 'B2', text: long }]
+  }));
+
+  for (const [name, xml] of files) {
+    if (!name.startsWith('xl/worksheets/') && name !== 'xl/comments1.xml') continue;
+    for (const [, text] of xml.matchAll(/<t[^>]*>([\s\S]*?)<\/t>/g)) {
+      assert.ok(text.length <= TyreXlsx.MAX_CELL_CHARS + 200, `a cell in ${name} holds ${text.length} characters`);
+    }
+  }
+  assert.match(files.get('xl/worksheets/sheet1.xml'), /…\[clipped]<\/t>/, 'the sheet cell says it was cut');
+  assert.match(files.get('xl/comments1.xml'), /…\[clipped]<\/t>/, 'and so does the comment');
+});
+
+// The record store is bounded too, so a document never becomes a record in the first
+// place — and the clip leaves a marker, which means a quote clipped to fit is no
+// longer a verbatim span and still fails verification rather than passing as its own
+// prefix.
+test('a record cannot carry a document in a string field', () => {
+  const long = 'x'.repeat(500000);
+  const rec = TyreCore.recToStoredShape({
+    company: 'Apollo Tyres', quarter: 'Q1 FY26', currency: { code: 'INR', unit: 'Crore' },
+    core: { revenue: 6500 }, core_quotes: { revenue: long },
+    outlook: { commentary: long, rm_trend: '', capex: '' }
+  }, { source: 'x.pdf' });
+
+  assert.ok(rec.quotes.revenue.length <= TyreCore.MAX_STORED_STRING_CHARS);
+  assert.ok(rec.outlook.commentary.length <= TyreCore.MAX_STORED_STRING_CHARS);
+  assert.match(rec.quotes.revenue, /…\[clipped]$/);
+
+  const v = TyreCore.verifyQuotes(rec, long);
+  assert.equal(v.checks[0].status, 'quote_too_long', 'the clipped quote is still not a citation');
+});
+
+// Every other sheet carries a figure with a quote behind it and a Verification column.
+// The Outlook sheet is free text nobody checked, and a reader moving between sheets
+// should not have to know which of them the checking applies to.
+test('the Outlook sheet says its columns are unverified', () => {
+  const model = TyreCore.buildWorkbookModel([approved('CEAT')], {});
+  const outlook = model.sheets.find((s) => s.name === 'Outlook');
+  for (const heading of outlook.aoa[0].slice(2)) {
+    assert.match(heading, /\(unverified\)$/, `"${heading}" does not say it is unverified`);
+  }
+});

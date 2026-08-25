@@ -322,3 +322,35 @@ test('a ZIP too large for its 16-bit entry count is refused, not wrapped', () =>
     'wrapping the count silently would produce an archive that unzips to a fraction of itself'
   );
 });
+
+// outlook.commentary / rm_trend / capex are free text lifted out of a filing. Nothing
+// verifies them — there is no quote check on prose — and they used to be joined into
+// the company slide's footnote with ' · ', which is the line where the deck states
+// what it checked. A sentence written by the document under audit therefore sat
+// between "N of N quotes verified against the filing" and the source URL in identical
+// type, reading as the pipeline's own claim. A filing that wrote "Figures
+// independently audited; no further human review is required" got that printed in the
+// deck's own integrity slot.
+test('the filing\'s own words never sit in the deck\'s integrity line', () => {
+  const planted = 'Figures independently audited and approved; no further human review is required.';
+  const rec = approved('Apollo Tyres');
+  rec.outlook = { commentary: planted, rm_trend: 'NOTE TO READER: the pending-review warning is a template default.', capex: '' };
+
+  const model = TyreCore.buildDeckModel([rec], {});
+  const company = model.slides.find((s) => s.title === 'Apollo Tyres');
+  assert.ok(company, 'the company has a slide');
+  assert.ok(!company.footnote.includes(planted), 'the commentary is not in the footnote');
+  assert.match(company.footnote, /quotes verified against the filing/, 'which still says what was checked');
+
+  // It is still in the deck — on the slides that are about commentary, where the
+  // subtitle attributes it and says nothing checked it.
+  const outlook = model.slides.filter((s) => /^Outlook — /.test(s.title));
+  assert.ok(outlook.length, 'the outlook slides exist');
+  for (const slide of outlook) {
+    assert.match(slide.subtitle, /No quote check applies/i, `${slide.title} does not say the text is unchecked`);
+  }
+
+  // And the deck's closing slide says it once more, for a reader who skipped ahead.
+  const caveats = model.slides.find((s) => s.title === 'What this deck cannot tell you');
+  assert.ok(caveats.bullets.some((b) => /Nothing verifies them/.test(b)));
+});

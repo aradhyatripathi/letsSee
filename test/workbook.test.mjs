@@ -81,7 +81,11 @@ test('the workbook has the four spec sheets in order, with the right headers', (
       ...TyreCore.PRODUCT_KEYS.map((k) => `Product: ${k}`)
     ]
   );
-  assert.deepEqual(sheet(model, 'Outlook').aoa[0], ['Company', 'Quarter', 'Commentary', 'Raw Material Trend', 'Capex']);
+  // The three text columns say (unverified) in their heading: this is the one sheet
+  // no quote check applies to, and a reader moving between sheets should not have to
+  // know that.
+  assert.deepEqual(sheet(model, 'Outlook').aoa[0],
+    ['Company', 'Quarter', 'Commentary (unverified)', 'Raw Material Trend (unverified)', 'Capex (unverified)']);
   assert.deepEqual(
     sheet(model, 'Sources & Quotes').aoa[0],
     ['Ref', 'Company', 'Quarter', 'Review', 'Metric', 'Value', 'Currency', 'Unit', 'Source Quote', 'Verification', 'Source']

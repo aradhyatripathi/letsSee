@@ -33,6 +33,22 @@ function xlEsc(value) {
     .replace(/"/g, '&quot;').replace(/'/g, '&apos;');
 }
 
+// Excel refuses a cell holding more than 32,767 characters. It does not refuse the
+// file — it opens it, announces that it repaired unreadable content, and drops the
+// part it did not like, which in a workbook whose whole claim is traceability is
+// the worst available outcome. Records are bounded upstream too; this is the last
+// line before bytes, and a format guarantee should not depend on an upstream step
+// having run.
+var XL_MAX_CELL_CHARS = 32000;
+var XL_CLIP_MARKER = ' …[clipped]';
+
+function xlClip(value) {
+  var s = String(value == null ? '' : value);
+  return s.length > XL_MAX_CELL_CHARS
+    ? s.slice(0, XL_MAX_CELL_CHARS - XL_CLIP_MARKER.length) + XL_CLIP_MARKER
+    : s;
+}
+
 /** 0 -> A, 25 -> Z, 26 -> AA. */
 function xlColName(index) {
   var s = '';
@@ -130,7 +146,7 @@ function xlSheet(sheet, hasComments) {
         xml += '<c r="' + ref + '" s="' + style + '"><v>' + value + '</v></c>';
         return;
       }
-      var text = xlEsc(value);
+      var text = xlEsc(xlClip(value));
       if (!text) { xml += '<c r="' + ref + '" s="' + style + '"/>'; return; }
       // Inline strings rather than a shared-string table: one part fewer, and no index to
       // get wrong. The size cost is irrelevant at this scale.
@@ -153,7 +169,7 @@ function xlComments(comments) {
   comments.forEach(function (c) {
     xml += '<comment ref="' + xlEsc(c.addr) + '" authorId="0"><text><r>' +
       '<rPr><sz val="9"/><rFont val="Calibri"/></rPr>' +
-      '<t xml:space="preserve">' + xlEsc(c.text) + '</t></r></text></comment>';
+      '<t xml:space="preserve">' + xlEsc(xlClip(c.text)) + '</t></r></text></comment>';
   });
   return xml + '</commentList></comments>';
 }
@@ -303,6 +319,8 @@ var TyreXlsx = {
   buildXlsxParts: buildXlsxParts,
   colName: xlColName,
   sheetName: xlSheetName,
+  clip: xlClip,
+  MAX_CELL_CHARS: XL_MAX_CELL_CHARS,
   MIME: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
 };
 

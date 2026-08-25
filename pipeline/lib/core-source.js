@@ -175,9 +175,30 @@ function sanitizeText(value) {
   return out;
 }
 
-/** Every string in a record, cleaned. Structure and numbers are untouched. */
+// The longest string a stored record may carry, in any field.
+//
+// A record holds quotes and short paragraphs of management commentary. It does not
+// hold documents, and nothing downstream is built for one: an unbounded outlook
+// field became a 480,000-character spreadsheet cell, fifteen times what Excel
+// accepts, in a file the operator exports and hands on.
+//
+// The clip is generous — far above any real commentary — and it leaves a visible
+// marker rather than trimming quietly, so a reader can tell text was cut. The
+// marker also means a clipped quote is no longer a verbatim span of anything, so a
+// quote clipped to fit still fails verification rather than passing as its own
+// prefix. Verification's own limit is far lower; this one is only about what a
+// record is allowed to weigh.
+var MAX_STORED_STRING_CHARS = 4000;
+var CLIP_MARKER = ' …[clipped]';
+
+/** Every string in a record, cleaned and bounded. Structure and numbers are untouched. */
 function sanitizeRecordText(node) {
-  if (typeof node === 'string') return sanitizeText(node);
+  if (typeof node === 'string') {
+    var clean = sanitizeText(node);
+    return clean.length > MAX_STORED_STRING_CHARS
+      ? clean.slice(0, MAX_STORED_STRING_CHARS - CLIP_MARKER.length) + CLIP_MARKER
+      : clean;
+  }
   if (Array.isArray(node)) return node.map(sanitizeRecordText);
   if (node && typeof node === 'object') {
     var out = {};
@@ -1056,8 +1077,15 @@ function buildWorkbookModel(records, opts) {
     segAoa.push(line);
   });
 
-  /* Outlook: paraphrased management commentary. */
-  var outAoa = [['Company', 'Quarter', 'Commentary', 'Raw Material Trend', 'Capex']];
+  /* Outlook: the companies' own words, and the one sheet nothing here verifies.
+     Every other sheet in this workbook carries a figure with a quote behind it and a
+     Verification column saying what happened. This one is free text lifted out of a
+     filing, so the column headings say so — a reader moving between sheets should not
+     have to know which of them the checking applies to. */
+  var outAoa = [[
+    'Company', 'Quarter',
+    'Commentary (unverified)', 'Raw Material Trend (unverified)', 'Capex (unverified)'
+  ]];
   rows.forEach(function (r) {
     var ol = r.outlook || {};
     outAoa.push([
@@ -1359,7 +1387,7 @@ function buildDeckModel(records, opts) {
 
   pushBulletSlides(slides, {
     title: 'Outlook — raw materials',
-    subtitle: 'Paraphrased management commentary, not quoted',
+    subtitle: 'The company\'s own commentary, summarised. No quote check applies to anything on this slide.',
     bullets: rows.map(function (r) {
       return companyLabel(r) + ': ' + (clipText((r.outlook && r.outlook.rm_trend) || '', 220) || 'no raw-material commentary in the filing');
     })
@@ -1367,7 +1395,7 @@ function buildDeckModel(records, opts) {
 
   pushBulletSlides(slides, {
     title: 'Outlook — capex and guidance',
-    subtitle: 'Paraphrased management commentary, not quoted',
+    subtitle: 'The company\'s own commentary, summarised. No quote check applies to anything on this slide.',
     bullets: rows.map(function (r) {
       return companyLabel(r) + ': ' + (clipText((r.outlook && r.outlook.capex) || '', 220) || 'no capex commentary in the filing');
     })
@@ -1391,9 +1419,14 @@ function buildDeckModel(records, opts) {
       columns: ['Metric', 'As reported', 'Metric', 'As reported'],
       align: ['l', 'r', 'l', 'r'],
       rows: lines.length ? lines : [['—', 'No figures were extracted from this filing', '', '']],
+      // The footnote is where this deck states what it checked, and only that. The
+      // filing's own commentary used to be joined into the same line with ' · ', so
+      // a sentence written by the document sat between "N of N quotes verified" and
+      // the source URL in identical type — a claim about audit status, authored by
+      // the thing under audit, reading as the pipeline's own. The commentary has
+      // slides of its own, where it is attributed.
       footnote: [
         (v.verified || 0) + ' of ' + (v.checked || 0) + ' quotes verified against the filing',
-        r.outlook && r.outlook.commentary ? clipText(r.outlook.commentary, 200) : null,
         r.source ? 'Source: ' + r.source : null
       ].filter(Boolean).join(' · ')
     });
@@ -1411,7 +1444,8 @@ function buildDeckModel(records, opts) {
       tally.unquoted
         ? tally.unquoted + ' figure' + (tally.unquoted === 1 ? ' was' : 's were') + ' reported without any quote at all. Those are the first ones to check.'
         : 'Every figure in this deck arrived with a quote.',
-      'Figures are as reported by each company. Different companies close their books differently; this deck does not restate them onto a common basis.'
+      'Figures are as reported by each company. Different companies close their books differently; this deck does not restate them onto a common basis.',
+      'The outlook slides are the companies\' own words, summarised. Nothing verifies them: there is no quote check on free text, so read them as what a company said about itself, not as something this deck established.'
     ]
   });
 
@@ -1574,6 +1608,7 @@ var TyreCore = {
   FX_TO_INR: FX_TO_INR,
   QUOTE_MATCH_THRESHOLD: QUOTE_MATCH_THRESHOLD,
   MAX_QUOTE_CHARS: MAX_QUOTE_CHARS,
+  MAX_STORED_STRING_CHARS: MAX_STORED_STRING_CHARS,
   fenceFor: fenceFor,
   SOURCE_CHAR_BUDGET: SOURCE_CHAR_BUDGET,
   EXTRACTION_SYSTEM: EXTRACTION_SYSTEM,
