@@ -800,6 +800,347 @@ function buildWorkbookModel(records, opts) {
 
 /* ----------------------------------------------------------------- export -- */
 
+
+/* -------------------------------------------------------------- deck model -- */
+
+// Slide groupings. Between them these name all 21 core metrics exactly once,
+// which is asserted in the tests: a metric added to CORE_METRICS and forgotten
+// here would quietly never reach the deck.
+var DECK_SECTIONS = [
+  { title: 'Headline comparison',      keys: ['revenue', 'ebitda', 'ebitda_margin', 'pat'] },
+  { title: 'Profitability and returns', keys: ['net_margin', 'roe', 'roce'] },
+  { title: 'Leverage and liquidity',   keys: ['debt_equity', 'current_ratio', 'quick_ratio', 'interest_coverage'] },
+  { title: 'Balance sheet',            keys: ['total_assets', 'total_liabilities', 'total_equity', 'cash'] },
+  { title: 'Cash generation',          keys: ['ocf', 'capex_amt', 'fcf'] },
+  { title: 'Working capital',          keys: ['inv_turnover', 'dso', 'dpo'] }
+];
+
+/**
+ * The deck as data: sheets of strings, no rendering, no file format.
+ *
+ * Same review rule as the workbook, for the same reason — a deck circulates
+ * further than a spreadsheet does, so a record a person rejected must not be in
+ * it under any option. `reviewedOnly` then narrows to positively approved.
+ *
+ * Figures are shown as reported, never converted. When the selected records do
+ * not share one currency the unit moves into its own column and the slide says
+ * so, because a column of numbers in three currencies read as one ranking is the
+ * most plausible way this deck could mislead someone.
+ */
+function buildDeckModel(records, opts) {
+  var o = opts || {};
+  var all = records || [];
+  var rejected = all.filter(function (r) { return r.review && r.review.status === 'rejected'; });
+  var rows = all.filter(function (r) { return !(r.review && r.review.status === 'rejected'); });
+  if (o.reviewedOnly) {
+    rows = rows.filter(function (r) { return r.review && r.review.status === 'approved'; });
+  }
+  rows.sort(function (a, b) { return String(a.company || '').localeCompare(String(b.company || '')); });
+
+  var DASH = '—';
+  var metricByKey = {};
+  CORE_METRICS.forEach(function (m) { metricByKey[m.key] = m; });
+
+  var quarters = uniqueStrings(rows.map(function (r) { return r.quarter; }));
+  var quarter = o.quarter || (quarters.length === 1 ? quarters[0] : quarters.join(', ')) || 'no quarter';
+
+  var currencies = uniqueStrings(rows.map(function (r) {
+    return r.currency ? [r.currency.code, r.currency.unit].filter(Boolean).join(' ') : '';
+  }));
+  var oneCurrency = currencies.length === 1 ? currencies[0] : null;
+
+  var approved = rows.filter(function (r) { return r.review && r.review.status === 'approved'; });
+  var pending = rows.filter(function (r) { return !r.review || r.review.status === 'pending' || !r.review.status; });
+  var reviewers = uniqueStrings(approved.map(function (r) { return r.review && r.review.reviewer; }));
+
+  var tally = { verified: 0, not_found: 0, value_not_in_quote: 0, unquoted: 0, checked: 0 };
+  rows.forEach(function (r) {
+    var v = r.verification;
+    if (!v) return;
+    tally.checked += v.checked || 0;
+    tally.verified += v.verified || 0;
+    tally.unquoted += v.unquoted || 0;
+    (v.checks || []).forEach(function (c) {
+      if (c.status === 'not_found') tally.not_found++;
+      if (c.status === 'value_not_in_quote') tally.value_not_in_quote++;
+    });
+  });
+
+  var provenance = {
+    total: rows.length,
+    approved: approved.length,
+    pending: pending.length,
+    rejected_withheld: rejected.length,
+    reviewers: reviewers,
+    currencies: currencies,
+    quarters: quarters,
+    verification: tally
+  };
+
+  var slides = [];
+
+  slides.push({
+    kind: 'title',
+    title: 'Indian tyre sector — ' + quarter,
+    subtitle: rows.length
+      ? rows.length + ' compan' + (rows.length === 1 ? 'y' : 'ies') + (oneCurrency ? ' · figures in ' + oneCurrency : '')
+      : 'No records selected',
+    footnote: 'Generated from reviewed filing extracts. Every figure traces to a quote from the filing it came from.'
+  });
+
+  if (!rows.length) {
+    slides.push({
+      kind: 'bullets',
+      title: 'Nothing to show',
+      bullets: [
+        'No records were available for this deck.',
+        rejected.length
+          ? rejected.length + ' record' + (rejected.length === 1 ? ' was' : 's were') + ' withheld because a reviewer rejected ' + (rejected.length === 1 ? 'it' : 'them') + '.'
+          : 'Import a run and review it first — a deck is built from reviewed records, not from raw extractions.'
+      ]
+    });
+    return { title: 'Indian tyre sector — ' + quarter, quarter: quarter, generated_at: o.generatedAt || null, provenance: provenance, slides: slides };
+  }
+
+  slides.push({
+    kind: 'bullets',
+    title: 'How to read this deck',
+    bullets: [
+      'Every figure was copied from a company filing by an extraction step that must quote its source. A figure whose quote could not be found in the filing is not in this deck.',
+      provenance.approved + ' of ' + provenance.total + ' records were approved by a person' + (reviewers.length ? ' (' + reviewers.join(', ') + ')' : '') + '.' +
+        (provenance.pending ? ' ' + provenance.pending + ' are still pending review and are marked on their slide.' : ''),
+      provenance.rejected_withheld
+        ? provenance.rejected_withheld + ' record' + (provenance.rejected_withheld === 1 ? '' : 's') + ' rejected in review ' + (provenance.rejected_withheld === 1 ? 'is' : 'are') + ' withheld from this deck entirely.'
+        : 'No record was rejected in review.',
+      oneCurrency
+        ? 'All figures are in ' + oneCurrency + ', as reported. Nothing has been converted or rescaled.'
+        : 'Figures are in each company’s own reporting currency, shown per row. They are NOT converted, so the columns are not directly comparable.',
+      'Blank cells (' + DASH + ') mean the filing did not state that figure. They are not zeros.'
+    ],
+    footnote: 'Quote coverage: ' + tally.verified + ' verified, ' + tally.unquoted + ' reported without a quote, across ' + tally.checked + ' checks.'
+  });
+
+  DECK_SECTIONS.forEach(function (section) {
+    var columns = ['Company'];
+    if (!oneCurrency) columns.push('Currency');
+    section.keys.forEach(function (k) {
+      var m = metricByKey[k];
+      columns.push(m ? m.label : k);
+    });
+
+    var body = rows.map(function (r) {
+      var line = [companyLabel(r)];
+      if (!oneCurrency) line.push(currencyLabelOf(r) || DASH);
+      section.keys.forEach(function (k) {
+        var v = r.core ? r.core[k] : null;
+        // The unit is carried once per row by the Currency column, or once per
+        // slide by the subtitle. Repeating it in every cell only crowds the table.
+        line.push(isNum(v) ? formatMetric(v, metricByKey[k], null) : DASH);
+      });
+      return line;
+    });
+
+    pushTableSlides(slides, {
+      title: section.title,
+      subtitle: quarter + (oneCurrency ? ' · figures in ' + oneCurrency : ' · figures in each company’s own currency'),
+      columns: columns,
+      rows: body,
+      footnote: [
+        oneCurrency ? null : 'Currencies differ across rows — do not read across as a ranking.',
+        pendingNote(rows)
+      ].filter(Boolean).join(' ') || null
+    });
+  });
+
+  pushTableSlides(slides, {
+    title: 'Channel mix',
+    subtitle: quarter + ' · as reported; blank where not broken out',
+    columns: ['Company'].concat(CHANNEL_KEYS.map(titleCase)),
+    rows: rows.map(function (r) {
+      var ch = (r.segments && r.segments.channels) || {};
+      return [companyLabel(r)].concat(CHANNEL_KEYS.map(function (k) {
+        return isNum(ch[k]) ? String(ch[k]) : DASH;
+      }));
+    }),
+    footnote: pendingNote(rows)
+  });
+
+  pushTableSlides(slides, {
+    title: 'Product mix',
+    subtitle: quarter + ' · as reported; blank where not broken out',
+    columns: ['Company'].concat(PRODUCT_KEYS),
+    rows: rows.map(function (r) {
+      var pc = (r.segments && r.segments.product_categories) || {};
+      return [companyLabel(r)].concat(PRODUCT_KEYS.map(function (k) {
+        return isNum(pc[k]) ? String(pc[k]) : DASH;
+      }));
+    }),
+    footnote: pendingNote(rows)
+  });
+
+  pushBulletSlides(slides, {
+    title: 'Outlook — raw materials',
+    subtitle: 'Paraphrased management commentary, not quoted',
+    bullets: rows.map(function (r) {
+      return companyLabel(r) + ': ' + (clipText((r.outlook && r.outlook.rm_trend) || '', 220) || 'no raw-material commentary in the filing');
+    })
+  });
+
+  pushBulletSlides(slides, {
+    title: 'Outlook — capex and guidance',
+    subtitle: 'Paraphrased management commentary, not quoted',
+    bullets: rows.map(function (r) {
+      return companyLabel(r) + ': ' + (clipText((r.outlook && r.outlook.capex) || '', 220) || 'no capex commentary in the filing');
+    })
+  });
+
+  rows.forEach(function (r) {
+    var v = r.verification || {};
+    var status = r.review && r.review.status === 'approved'
+      ? 'Approved' + (r.review.reviewer ? ' by ' + r.review.reviewer : '')
+      : 'PENDING REVIEW — not yet checked by a person';
+    var pairs = CORE_METRICS.filter(function (m) { return isNum(r.core && r.core[m.key]); })
+      .map(function (m) { return [m.label, formatMetric(r.core[m.key], m, r.currency)]; });
+    // Twenty-one metrics down one column would be unreadable at slide size, so
+    // they run down two columns instead: rows 1..n/2 on the left, the rest right.
+    var lines = pairTwoUp(pairs, DASH);
+
+    slides.push({
+      kind: 'table',
+      title: r.company || 'Unknown company',
+      subtitle: (r.quarter || quarter) + ' · ' + (currencyLabelOf(r) || 'currency not stated') + ' · ' + status,
+      columns: ['Metric', 'As reported', 'Metric', 'As reported'],
+      align: ['l', 'r', 'l', 'r'],
+      rows: lines.length ? lines : [['—', 'No figures were extracted from this filing', '', '']],
+      footnote: [
+        (v.verified || 0) + ' of ' + (v.checked || 0) + ' quotes verified against the filing',
+        r.outlook && r.outlook.commentary ? clipText(r.outlook.commentary, 200) : null,
+        r.source ? 'Source: ' + r.source : null
+      ].filter(Boolean).join(' · ')
+    });
+  });
+
+  slides.push({
+    kind: 'bullets',
+    title: 'What this deck cannot tell you',
+    bullets: [
+      'Quote verification proves a figure was copied from the filing. It does not prove the right table was read — standalone results where consolidated were wanted, or a segment sub-total read as a group total, would pass every automatic check.',
+      'That is what the human review step is for, and why there is no auto-accept path at any scale.',
+      provenance.pending
+        ? provenance.pending + ' record' + (provenance.pending === 1 ? '' : 's') + ' in this deck ' + (provenance.pending === 1 ? 'has' : 'have') + ' not been reviewed yet and should be treated as a draft.'
+        : 'Every record in this deck has been reviewed and approved by a person.',
+      tally.unquoted
+        ? tally.unquoted + ' figure' + (tally.unquoted === 1 ? ' was' : 's were') + ' reported without any quote at all. Those are the first ones to check.'
+        : 'Every figure in this deck arrived with a quote.',
+      'Figures are as reported by each company. Different companies close their books differently; this deck does not restate them onto a common basis.'
+    ]
+  });
+
+  return {
+    title: 'Indian tyre sector — ' + quarter,
+    subtitle: slides[0].subtitle,
+    quarter: quarter,
+    generated_at: o.generatedAt || null,
+    provenance: provenance,
+    slides: slides
+  };
+}
+
+// A slide holds about a dozen table rows before the type gets too small to read
+// from the back of a room. Anything longer continues on the next slide rather
+// than being silently cut — the roster is deliberately not a fixed size.
+var MAX_TABLE_ROWS = 12;
+var MAX_BULLETS = 8;
+
+function pushTableSlides(slides, spec) {
+  var chunks = chunk(spec.rows, MAX_TABLE_ROWS);
+  if (!chunks.length) chunks = [[]];
+  chunks.forEach(function (part, i) {
+    slides.push({
+      kind: 'table',
+      title: i === 0 ? spec.title : spec.title + ' (cont.)',
+      subtitle: spec.subtitle || null,
+      columns: spec.columns,
+      rows: part,
+      footnote: i === chunks.length - 1 ? (spec.footnote || null) : null
+    });
+  });
+}
+
+function pushBulletSlides(slides, spec) {
+  var chunks = chunk(spec.bullets, MAX_BULLETS);
+  if (!chunks.length) chunks = [[]];
+  chunks.forEach(function (part, i) {
+    slides.push({
+      kind: 'bullets',
+      title: i === 0 ? spec.title : spec.title + ' (cont.)',
+      subtitle: spec.subtitle || null,
+      bullets: part,
+      footnote: i === chunks.length - 1 ? (spec.footnote || null) : null
+    });
+  });
+}
+
+function chunk(list, size) {
+  var out = [];
+  for (var i = 0; i < (list || []).length; i += size) out.push(list.slice(i, i + size));
+  return out;
+}
+
+// [[a,1],[b,2],[c,3]] with a dash filler -> [[a,1,c,3],[b,2,'—','']]
+function pairTwoUp(pairs, dash) {
+  var half = Math.ceil(pairs.length / 2);
+  var out = [];
+  for (var i = 0; i < half; i++) {
+    var left = pairs[i];
+    var right = pairs[i + half];
+    out.push([left[0], left[1], right ? right[0] : '', right ? right[1] : '']);
+  }
+  return out;
+}
+
+function companyLabel(r) {
+  var name = r.company || 'Unknown';
+  var pending = !r.review || r.review.status !== 'approved';
+  return pending ? name + ' *' : name;
+}
+
+// The asterisk is the only thing separating a reviewed figure from an unreviewed
+// one on a slide someone will read out of context, so it says what it means on
+// every slide that uses it rather than only in the preamble.
+function pendingNote(rows) {
+  var n = rows.filter(function (r) { return !r.review || r.review.status !== 'approved'; }).length;
+  return n ? '* not yet reviewed by a person — treat as draft.' : null;
+}
+
+function currencyLabelOf(r) {
+  if (!r.currency) return '';
+  return [r.currency.code, r.currency.unit].filter(Boolean).join(' ');
+}
+
+function uniqueStrings(values) {
+  var seen = {};
+  var out = [];
+  (values || []).forEach(function (v) {
+    var s = v == null ? '' : String(v).trim();
+    if (!s || seen[s]) return;
+    seen[s] = true;
+    out.push(s);
+  });
+  return out;
+}
+
+function titleCase(s) {
+  var str = String(s || '');
+  return str.charAt(0).toUpperCase() + str.slice(1);
+}
+
+function clipText(value, max) {
+  var s = String(value == null ? '' : value).replace(/\s+/g, ' ').trim();
+  if (!s) return '';
+  return s.length > max ? s.slice(0, max - 1) + '…' : s;
+}
+
 var TyreCore = {
   SCHEMA_HINT: SCHEMA_HINT,
   CORE_METRICS: CORE_METRICS,
@@ -830,7 +1171,9 @@ var TyreCore = {
   buildExtractionPrompt: buildExtractionPrompt,
   buildQAPrompt: buildQAPrompt,
   parseModelJSON: parseModelJSON,
-  buildWorkbookModel: buildWorkbookModel
+  buildWorkbookModel: buildWorkbookModel,
+  buildDeckModel: buildDeckModel,
+  DECK_SECTIONS: DECK_SECTIONS
 };
 
 if (typeof window !== 'undefined') { window.TyreCore = TyreCore; }

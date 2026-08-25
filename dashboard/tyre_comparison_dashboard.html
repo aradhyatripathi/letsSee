@@ -360,12 +360,14 @@
       <div class="toolbar">
         <button type="button" class="btn btn-ghost" id="export-csv-btn">Export CSV</button>
         <button type="button" class="btn btn-ghost" id="export-excel-btn">Export Excel workbook</button>
+        <button type="button" class="btn btn-ghost" id="export-deck-btn">Export PowerPoint deck</button>
         <label class="check"><input type="checkbox" id="workbook-reviewed-only" checked> Approved records only</label>
         <button type="button" class="btn btn-ghost" id="backup-json-btn">Backup all data (JSON)</button>
         <button type="button" class="btn btn-ghost" id="restore-json-btn">Restore / import JSON</button>
         <input type="file" id="restore-json-input" accept="application/json" style="display:none;">
       </div>
       <p class="sub" style="margin-top:-8px;">The Excel export is a four-sheet workbook — Core Financials, Segments, Outlook, Sources &amp; Quotes — and every populated Core Financials cell carries a comment with the source quote behind it, so a number can be checked without leaving the file. "Approved records only" is on by default: an export is reviewed data unless you deliberately say otherwise. The CSV above is unchanged (one flat sheet, all records, normalized to ₹ crore). One honest caveat about formatting: this page loads the community build of SheetJS, whose writer ignores per-cell styling — column widths and the cell comments come through, but bold headers and wrapped text are dropped, and freeze panes may be too. The data and the traceability are unaffected, which is what the workbook is for.</p>
+      <p class="sub" style="margin-top:-8px;">The PowerPoint export is the same data as a deck: a title and provenance slide, one comparison slide per metric group, channel and product mix, outlook themes, a slide per company, and a closing slide saying plainly what quote verification does <i>not</i> catch. It obeys the same "Approved records only" tick, and a company nobody has reviewed is marked with an asterisk on every slide it appears on. Rejected records are never included, with the box ticked or not. The file is built here in the browser with no library — <span style="font-family:'IBM Plex Mono',monospace;">node pipeline/deck.mjs</span> renders the identical slides from the identical code.</p>
       <p class="sub" style="margin-top:-8px;">"Restore / import JSON" takes either a backup from this dashboard or a <span style="font-family:'IBM Plex Mono',monospace;">records.json</span> written by the Node pipeline (and a bare array of records). Each record is validated on the way in, anything malformed is listed rather than silently dropped, and imported records arrive <b>pending</b>. A review decision is only carried in where this browser already holds that exact record unchanged, so the decision was demonstrably made here — a file cannot import its own approvals.</p>
       <div class="card" id="import-report" style="display:none;background:var(--paper);"></div>
       <div id="records-wrap"></div>
@@ -1354,6 +1356,347 @@ function buildWorkbookModel(records, opts) {
 
 /* ----------------------------------------------------------------- export -- */
 
+
+/* -------------------------------------------------------------- deck model -- */
+
+// Slide groupings. Between them these name all 21 core metrics exactly once,
+// which is asserted in the tests: a metric added to CORE_METRICS and forgotten
+// here would quietly never reach the deck.
+var DECK_SECTIONS = [
+  { title: 'Headline comparison',      keys: ['revenue', 'ebitda', 'ebitda_margin', 'pat'] },
+  { title: 'Profitability and returns', keys: ['net_margin', 'roe', 'roce'] },
+  { title: 'Leverage and liquidity',   keys: ['debt_equity', 'current_ratio', 'quick_ratio', 'interest_coverage'] },
+  { title: 'Balance sheet',            keys: ['total_assets', 'total_liabilities', 'total_equity', 'cash'] },
+  { title: 'Cash generation',          keys: ['ocf', 'capex_amt', 'fcf'] },
+  { title: 'Working capital',          keys: ['inv_turnover', 'dso', 'dpo'] }
+];
+
+/**
+ * The deck as data: sheets of strings, no rendering, no file format.
+ *
+ * Same review rule as the workbook, for the same reason — a deck circulates
+ * further than a spreadsheet does, so a record a person rejected must not be in
+ * it under any option. `reviewedOnly` then narrows to positively approved.
+ *
+ * Figures are shown as reported, never converted. When the selected records do
+ * not share one currency the unit moves into its own column and the slide says
+ * so, because a column of numbers in three currencies read as one ranking is the
+ * most plausible way this deck could mislead someone.
+ */
+function buildDeckModel(records, opts) {
+  var o = opts || {};
+  var all = records || [];
+  var rejected = all.filter(function (r) { return r.review && r.review.status === 'rejected'; });
+  var rows = all.filter(function (r) { return !(r.review && r.review.status === 'rejected'); });
+  if (o.reviewedOnly) {
+    rows = rows.filter(function (r) { return r.review && r.review.status === 'approved'; });
+  }
+  rows.sort(function (a, b) { return String(a.company || '').localeCompare(String(b.company || '')); });
+
+  var DASH = '—';
+  var metricByKey = {};
+  CORE_METRICS.forEach(function (m) { metricByKey[m.key] = m; });
+
+  var quarters = uniqueStrings(rows.map(function (r) { return r.quarter; }));
+  var quarter = o.quarter || (quarters.length === 1 ? quarters[0] : quarters.join(', ')) || 'no quarter';
+
+  var currencies = uniqueStrings(rows.map(function (r) {
+    return r.currency ? [r.currency.code, r.currency.unit].filter(Boolean).join(' ') : '';
+  }));
+  var oneCurrency = currencies.length === 1 ? currencies[0] : null;
+
+  var approved = rows.filter(function (r) { return r.review && r.review.status === 'approved'; });
+  var pending = rows.filter(function (r) { return !r.review || r.review.status === 'pending' || !r.review.status; });
+  var reviewers = uniqueStrings(approved.map(function (r) { return r.review && r.review.reviewer; }));
+
+  var tally = { verified: 0, not_found: 0, value_not_in_quote: 0, unquoted: 0, checked: 0 };
+  rows.forEach(function (r) {
+    var v = r.verification;
+    if (!v) return;
+    tally.checked += v.checked || 0;
+    tally.verified += v.verified || 0;
+    tally.unquoted += v.unquoted || 0;
+    (v.checks || []).forEach(function (c) {
+      if (c.status === 'not_found') tally.not_found++;
+      if (c.status === 'value_not_in_quote') tally.value_not_in_quote++;
+    });
+  });
+
+  var provenance = {
+    total: rows.length,
+    approved: approved.length,
+    pending: pending.length,
+    rejected_withheld: rejected.length,
+    reviewers: reviewers,
+    currencies: currencies,
+    quarters: quarters,
+    verification: tally
+  };
+
+  var slides = [];
+
+  slides.push({
+    kind: 'title',
+    title: 'Indian tyre sector — ' + quarter,
+    subtitle: rows.length
+      ? rows.length + ' compan' + (rows.length === 1 ? 'y' : 'ies') + (oneCurrency ? ' · figures in ' + oneCurrency : '')
+      : 'No records selected',
+    footnote: 'Generated from reviewed filing extracts. Every figure traces to a quote from the filing it came from.'
+  });
+
+  if (!rows.length) {
+    slides.push({
+      kind: 'bullets',
+      title: 'Nothing to show',
+      bullets: [
+        'No records were available for this deck.',
+        rejected.length
+          ? rejected.length + ' record' + (rejected.length === 1 ? ' was' : 's were') + ' withheld because a reviewer rejected ' + (rejected.length === 1 ? 'it' : 'them') + '.'
+          : 'Import a run and review it first — a deck is built from reviewed records, not from raw extractions.'
+      ]
+    });
+    return { title: 'Indian tyre sector — ' + quarter, quarter: quarter, generated_at: o.generatedAt || null, provenance: provenance, slides: slides };
+  }
+
+  slides.push({
+    kind: 'bullets',
+    title: 'How to read this deck',
+    bullets: [
+      'Every figure was copied from a company filing by an extraction step that must quote its source. A figure whose quote could not be found in the filing is not in this deck.',
+      provenance.approved + ' of ' + provenance.total + ' records were approved by a person' + (reviewers.length ? ' (' + reviewers.join(', ') + ')' : '') + '.' +
+        (provenance.pending ? ' ' + provenance.pending + ' are still pending review and are marked on their slide.' : ''),
+      provenance.rejected_withheld
+        ? provenance.rejected_withheld + ' record' + (provenance.rejected_withheld === 1 ? '' : 's') + ' rejected in review ' + (provenance.rejected_withheld === 1 ? 'is' : 'are') + ' withheld from this deck entirely.'
+        : 'No record was rejected in review.',
+      oneCurrency
+        ? 'All figures are in ' + oneCurrency + ', as reported. Nothing has been converted or rescaled.'
+        : 'Figures are in each company’s own reporting currency, shown per row. They are NOT converted, so the columns are not directly comparable.',
+      'Blank cells (' + DASH + ') mean the filing did not state that figure. They are not zeros.'
+    ],
+    footnote: 'Quote coverage: ' + tally.verified + ' verified, ' + tally.unquoted + ' reported without a quote, across ' + tally.checked + ' checks.'
+  });
+
+  DECK_SECTIONS.forEach(function (section) {
+    var columns = ['Company'];
+    if (!oneCurrency) columns.push('Currency');
+    section.keys.forEach(function (k) {
+      var m = metricByKey[k];
+      columns.push(m ? m.label : k);
+    });
+
+    var body = rows.map(function (r) {
+      var line = [companyLabel(r)];
+      if (!oneCurrency) line.push(currencyLabelOf(r) || DASH);
+      section.keys.forEach(function (k) {
+        var v = r.core ? r.core[k] : null;
+        // The unit is carried once per row by the Currency column, or once per
+        // slide by the subtitle. Repeating it in every cell only crowds the table.
+        line.push(isNum(v) ? formatMetric(v, metricByKey[k], null) : DASH);
+      });
+      return line;
+    });
+
+    pushTableSlides(slides, {
+      title: section.title,
+      subtitle: quarter + (oneCurrency ? ' · figures in ' + oneCurrency : ' · figures in each company’s own currency'),
+      columns: columns,
+      rows: body,
+      footnote: [
+        oneCurrency ? null : 'Currencies differ across rows — do not read across as a ranking.',
+        pendingNote(rows)
+      ].filter(Boolean).join(' ') || null
+    });
+  });
+
+  pushTableSlides(slides, {
+    title: 'Channel mix',
+    subtitle: quarter + ' · as reported; blank where not broken out',
+    columns: ['Company'].concat(CHANNEL_KEYS.map(titleCase)),
+    rows: rows.map(function (r) {
+      var ch = (r.segments && r.segments.channels) || {};
+      return [companyLabel(r)].concat(CHANNEL_KEYS.map(function (k) {
+        return isNum(ch[k]) ? String(ch[k]) : DASH;
+      }));
+    }),
+    footnote: pendingNote(rows)
+  });
+
+  pushTableSlides(slides, {
+    title: 'Product mix',
+    subtitle: quarter + ' · as reported; blank where not broken out',
+    columns: ['Company'].concat(PRODUCT_KEYS),
+    rows: rows.map(function (r) {
+      var pc = (r.segments && r.segments.product_categories) || {};
+      return [companyLabel(r)].concat(PRODUCT_KEYS.map(function (k) {
+        return isNum(pc[k]) ? String(pc[k]) : DASH;
+      }));
+    }),
+    footnote: pendingNote(rows)
+  });
+
+  pushBulletSlides(slides, {
+    title: 'Outlook — raw materials',
+    subtitle: 'Paraphrased management commentary, not quoted',
+    bullets: rows.map(function (r) {
+      return companyLabel(r) + ': ' + (clipText((r.outlook && r.outlook.rm_trend) || '', 220) || 'no raw-material commentary in the filing');
+    })
+  });
+
+  pushBulletSlides(slides, {
+    title: 'Outlook — capex and guidance',
+    subtitle: 'Paraphrased management commentary, not quoted',
+    bullets: rows.map(function (r) {
+      return companyLabel(r) + ': ' + (clipText((r.outlook && r.outlook.capex) || '', 220) || 'no capex commentary in the filing');
+    })
+  });
+
+  rows.forEach(function (r) {
+    var v = r.verification || {};
+    var status = r.review && r.review.status === 'approved'
+      ? 'Approved' + (r.review.reviewer ? ' by ' + r.review.reviewer : '')
+      : 'PENDING REVIEW — not yet checked by a person';
+    var pairs = CORE_METRICS.filter(function (m) { return isNum(r.core && r.core[m.key]); })
+      .map(function (m) { return [m.label, formatMetric(r.core[m.key], m, r.currency)]; });
+    // Twenty-one metrics down one column would be unreadable at slide size, so
+    // they run down two columns instead: rows 1..n/2 on the left, the rest right.
+    var lines = pairTwoUp(pairs, DASH);
+
+    slides.push({
+      kind: 'table',
+      title: r.company || 'Unknown company',
+      subtitle: (r.quarter || quarter) + ' · ' + (currencyLabelOf(r) || 'currency not stated') + ' · ' + status,
+      columns: ['Metric', 'As reported', 'Metric', 'As reported'],
+      align: ['l', 'r', 'l', 'r'],
+      rows: lines.length ? lines : [['—', 'No figures were extracted from this filing', '', '']],
+      footnote: [
+        (v.verified || 0) + ' of ' + (v.checked || 0) + ' quotes verified against the filing',
+        r.outlook && r.outlook.commentary ? clipText(r.outlook.commentary, 200) : null,
+        r.source ? 'Source: ' + r.source : null
+      ].filter(Boolean).join(' · ')
+    });
+  });
+
+  slides.push({
+    kind: 'bullets',
+    title: 'What this deck cannot tell you',
+    bullets: [
+      'Quote verification proves a figure was copied from the filing. It does not prove the right table was read — standalone results where consolidated were wanted, or a segment sub-total read as a group total, would pass every automatic check.',
+      'That is what the human review step is for, and why there is no auto-accept path at any scale.',
+      provenance.pending
+        ? provenance.pending + ' record' + (provenance.pending === 1 ? '' : 's') + ' in this deck ' + (provenance.pending === 1 ? 'has' : 'have') + ' not been reviewed yet and should be treated as a draft.'
+        : 'Every record in this deck has been reviewed and approved by a person.',
+      tally.unquoted
+        ? tally.unquoted + ' figure' + (tally.unquoted === 1 ? ' was' : 's were') + ' reported without any quote at all. Those are the first ones to check.'
+        : 'Every figure in this deck arrived with a quote.',
+      'Figures are as reported by each company. Different companies close their books differently; this deck does not restate them onto a common basis.'
+    ]
+  });
+
+  return {
+    title: 'Indian tyre sector — ' + quarter,
+    subtitle: slides[0].subtitle,
+    quarter: quarter,
+    generated_at: o.generatedAt || null,
+    provenance: provenance,
+    slides: slides
+  };
+}
+
+// A slide holds about a dozen table rows before the type gets too small to read
+// from the back of a room. Anything longer continues on the next slide rather
+// than being silently cut — the roster is deliberately not a fixed size.
+var MAX_TABLE_ROWS = 12;
+var MAX_BULLETS = 8;
+
+function pushTableSlides(slides, spec) {
+  var chunks = chunk(spec.rows, MAX_TABLE_ROWS);
+  if (!chunks.length) chunks = [[]];
+  chunks.forEach(function (part, i) {
+    slides.push({
+      kind: 'table',
+      title: i === 0 ? spec.title : spec.title + ' (cont.)',
+      subtitle: spec.subtitle || null,
+      columns: spec.columns,
+      rows: part,
+      footnote: i === chunks.length - 1 ? (spec.footnote || null) : null
+    });
+  });
+}
+
+function pushBulletSlides(slides, spec) {
+  var chunks = chunk(spec.bullets, MAX_BULLETS);
+  if (!chunks.length) chunks = [[]];
+  chunks.forEach(function (part, i) {
+    slides.push({
+      kind: 'bullets',
+      title: i === 0 ? spec.title : spec.title + ' (cont.)',
+      subtitle: spec.subtitle || null,
+      bullets: part,
+      footnote: i === chunks.length - 1 ? (spec.footnote || null) : null
+    });
+  });
+}
+
+function chunk(list, size) {
+  var out = [];
+  for (var i = 0; i < (list || []).length; i += size) out.push(list.slice(i, i + size));
+  return out;
+}
+
+// [[a,1],[b,2],[c,3]] with a dash filler -> [[a,1,c,3],[b,2,'—','']]
+function pairTwoUp(pairs, dash) {
+  var half = Math.ceil(pairs.length / 2);
+  var out = [];
+  for (var i = 0; i < half; i++) {
+    var left = pairs[i];
+    var right = pairs[i + half];
+    out.push([left[0], left[1], right ? right[0] : '', right ? right[1] : '']);
+  }
+  return out;
+}
+
+function companyLabel(r) {
+  var name = r.company || 'Unknown';
+  var pending = !r.review || r.review.status !== 'approved';
+  return pending ? name + ' *' : name;
+}
+
+// The asterisk is the only thing separating a reviewed figure from an unreviewed
+// one on a slide someone will read out of context, so it says what it means on
+// every slide that uses it rather than only in the preamble.
+function pendingNote(rows) {
+  var n = rows.filter(function (r) { return !r.review || r.review.status !== 'approved'; }).length;
+  return n ? '* not yet reviewed by a person — treat as draft.' : null;
+}
+
+function currencyLabelOf(r) {
+  if (!r.currency) return '';
+  return [r.currency.code, r.currency.unit].filter(Boolean).join(' ');
+}
+
+function uniqueStrings(values) {
+  var seen = {};
+  var out = [];
+  (values || []).forEach(function (v) {
+    var s = v == null ? '' : String(v).trim();
+    if (!s || seen[s]) return;
+    seen[s] = true;
+    out.push(s);
+  });
+  return out;
+}
+
+function titleCase(s) {
+  var str = String(s || '');
+  return str.charAt(0).toUpperCase() + str.slice(1);
+}
+
+function clipText(value, max) {
+  var s = String(value == null ? '' : value).replace(/\s+/g, ' ').trim();
+  if (!s) return '';
+  return s.length > max ? s.slice(0, max - 1) + '…' : s;
+}
+
 var TyreCore = {
   SCHEMA_HINT: SCHEMA_HINT,
   CORE_METRICS: CORE_METRICS,
@@ -1384,7 +1727,9 @@ var TyreCore = {
   buildExtractionPrompt: buildExtractionPrompt,
   buildQAPrompt: buildQAPrompt,
   parseModelJSON: parseModelJSON,
-  buildWorkbookModel: buildWorkbookModel
+  buildWorkbookModel: buildWorkbookModel,
+  buildDeckModel: buildDeckModel,
+  DECK_SECTIONS: DECK_SECTIONS
 };
 
 if (typeof window !== 'undefined') { window.TyreCore = TyreCore; }
@@ -1393,8 +1738,535 @@ if (typeof globalThis !== 'undefined') { globalThis.TyreCore = TyreCore; }
 })();
 </script>
 
+<!--
+  The PowerPoint renderer, inlined the same way and for the same reason: the
+  Export Deck button below and `node pipeline/deck.mjs` must produce the same
+  slides. Edit pipeline/lib/deck-source.js and re-run `npm run sync:core`.
+-->
+<script>
+(function () {
+/* ==== TYRE-DECK:BEGIN ====
+ * PowerPoint rendering for the deck model that TyreCore.buildDeckModel produces.
+ * Inlined verbatim into dashboard/tyre_comparison_dashboard.html between the
+ * TYRE-DECK markers and loaded by pipeline/lib/deck.mjs, the same way the core
+ * is. `npm run sync:core` copies it; `npm test` fails if the two drift.
+ *
+ * Plain script — no imports, no exports, no top-level await. Everything hangs
+ * off the TyreDeck object defined at the bottom.
+ *
+ * Why hand-rolled: the pipeline carries no runtime npm dependencies, and the
+ * dashboard is one file with no build step, so a library is not available on
+ * either side. A .pptx is a ZIP of XML parts, and the parts a presentation
+ * actually needs are few. Entries are STORED rather than deflated, because the
+ * browser has no zlib and a stored ZIP is equally valid — a deck of this size
+ * lands around a quarter of a megabyte either way.
+ *
+ * Every shape is positioned explicitly rather than inheriting from a layout
+ * placeholder, so what the code says is what the slide shows.
+ */
+
+/* ------------------------------------------------------------------ bytes -- */
+
+var TD_CRC_TABLE = (function () {
+  var table = new Int32Array(256);
+  for (var n = 0; n < 256; n++) {
+    var c = n;
+    for (var k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+    table[n] = c;
+  }
+  return table;
+})();
+
+function tdCrc32(bytes) {
+  var c = -1;
+  for (var i = 0; i < bytes.length; i++) c = TD_CRC_TABLE[(c ^ bytes[i]) & 0xff] ^ (c >>> 8);
+  return (c ^ -1) >>> 0;
+}
+
+function tdUtf8(str) {
+  var s = String(str == null ? '' : str);
+  if (typeof TextEncoder !== 'undefined') return new TextEncoder().encode(s);
+  var out = [];
+  for (var i = 0; i < s.length; i++) {
+    var c = s.charCodeAt(i);
+    if (c < 0x80) out.push(c);
+    else if (c < 0x800) out.push(0xc0 | (c >> 6), 0x80 | (c & 0x3f));
+    else if (c >= 0xd800 && c <= 0xdbff && i + 1 < s.length) {
+      var cp = 0x10000 + ((c - 0xd800) << 10) + (s.charCodeAt(++i) - 0xdc00);
+      out.push(0xf0 | (cp >> 18), 0x80 | ((cp >> 12) & 0x3f), 0x80 | ((cp >> 6) & 0x3f), 0x80 | (cp & 0x3f));
+    } else out.push(0xe0 | (c >> 12), 0x80 | ((c >> 6) & 0x3f), 0x80 | (c & 0x3f));
+  }
+  return new Uint8Array(out);
+}
+
+// One fixed timestamp for every entry: the same deck model must render to the
+// same bytes twice, or the tests cannot compare anything. 1 Jan 2020, 00:00.
+var TD_DOS_TIME = 0;
+var TD_DOS_DATE = ((2020 - 1980) << 9) | (1 << 5) | 1;
+
+function tdZip(entries) {
+  var chunks = [];
+  var central = [];
+  var offset = 0;
+
+  function push(bytes) { chunks.push(bytes); offset += bytes.length; }
+  function u16(v) { return new Uint8Array([v & 0xff, (v >> 8) & 0xff]); }
+  function u32(v) { return new Uint8Array([v & 0xff, (v >>> 8) & 0xff, (v >>> 16) & 0xff, (v >>> 24) & 0xff]); }
+  function join(list) {
+    var total = 0, i;
+    for (i = 0; i < list.length; i++) total += list[i].length;
+    var out = new Uint8Array(total), at = 0;
+    for (i = 0; i < list.length; i++) { out.set(list[i], at); at += list[i].length; }
+    return out;
+  }
+
+  entries.forEach(function (entry) {
+    var name = tdUtf8(entry.name);
+    var data = entry.data instanceof Uint8Array ? entry.data : tdUtf8(entry.data);
+    var crc = tdCrc32(data);
+    var localAt = offset;
+
+    push(join([
+      u32(0x04034b50), u16(20), u16(0x0800), u16(0), u16(TD_DOS_TIME), u16(TD_DOS_DATE),
+      u32(crc), u32(data.length), u32(data.length), u16(name.length), u16(0), name
+    ]));
+    push(data);
+
+    central.push(join([
+      u32(0x02014b50), u16(20), u16(20), u16(0x0800), u16(0), u16(TD_DOS_TIME), u16(TD_DOS_DATE),
+      u32(crc), u32(data.length), u32(data.length),
+      u16(name.length), u16(0), u16(0), u16(0), u16(0), u32(0), u32(localAt), name
+    ]));
+  });
+
+  var cdStart = offset;
+  var cd = join(central);
+  push(cd);
+  push(join([
+    u32(0x06054b50), u16(0), u16(0), u16(entries.length), u16(entries.length),
+    u32(cd.length), u32(cdStart), u16(0)
+  ]));
+
+  return join(chunks);
+}
+
+/* -------------------------------------------------------------------- xml -- */
+
+// Control characters are not representable in XML 1.0, and a PDF text layer
+// hands them over more often than you would hope — an unescaped one makes the
+// whole package unopenable, which is a bad way to find out.
+var TD_CONTROL_CHARS = /[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g;
+
+function tdEsc(value) {
+  return String(value == null ? '' : value)
+    .replace(TD_CONTROL_CHARS, '')
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&apos;');
+}
+
+var TD_XML_DECL = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n';
+var TD_NS_P = 'xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" ' +
+  'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" ' +
+  'xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"';
+
+/* ----------------------------------------------------------------- layout -- */
+
+var TD = {
+  W: 12192000, H: 6858000,          // 16:9, in EMU (914400 EMU to the inch)
+  MARGIN: 685800,                   // 0.75"
+  TITLE_Y: 411480,
+  TITLE_H: 800100,
+  SUB_Y: 1188720,
+  SUB_H: 365760,
+  BODY_Y: 1691640,
+  FOOT_H: 457200,
+  ink: '1A1A1A',
+  navy: '1F3A5F',
+  muted: '6B7280',
+  band: 'F4F5F7',
+  line: 'C9CFD8',
+  paper: 'FFFFFF',
+  font: 'Calibri'
+};
+TD.CONTENT_W = TD.W - TD.MARGIN * 2;
+TD.FOOT_Y = TD.H - TD.MARGIN / 2 - TD.FOOT_H;
+TD.BODY_H = TD.FOOT_Y - TD.BODY_Y - 91440;
+
+function tdRun(text, opts) {
+  var o = opts || {};
+  var props = '<a:rPr lang="en-US" sz="' + (o.sz || 1400) + '"' +
+    (o.b ? ' b="1"' : '') + (o.i ? ' i="1"' : '') + ' dirty="0">' +
+    '<a:solidFill><a:srgbClr val="' + (o.color || TD.ink) + '"/></a:solidFill>' +
+    '<a:latin typeface="' + TD.font + '"/><a:cs typeface="' + TD.font + '"/></a:rPr>';
+  return '<a:r>' + props + '<a:t>' + tdEsc(text) + '</a:t></a:r>';
+}
+
+// DrawingML validates a:pPr's children by order, not just presence: spacing comes
+// before the bullet elements, and a consumer that checks will refuse the whole
+// package if they are swapped rather than ignoring the paragraph.
+function tdPara(text, opts) {
+  var o = opts || {};
+  var pPr = '<a:pPr algn="' + (o.algn || 'l') + '"' + (o.indent ? ' marL="285750" indent="-285750"' : '') + '>' +
+    (o.spaceAfter ? '<a:spcAft><a:spcPts val="' + o.spaceAfter + '"/></a:spcAft>' : '') +
+    (o.bullet ? '<a:buFont typeface="Arial"/><a:buChar char="&#8226;"/>' : '<a:buNone/>') +
+    '</a:pPr>';
+  return '<a:p>' + pPr + (text === '' ? '' : tdRun(text, o)) + '</a:p>';
+}
+
+var TD_SHAPE_ID = { n: 1 };
+
+function tdTextBox(x, y, cx, cy, paragraphs, opts) {
+  var o = opts || {};
+  var id = ++TD_SHAPE_ID.n;
+  return '<p:sp><p:nvSpPr><p:cNvPr id="' + id + '" name="Text ' + id + '"/>' +
+    '<p:cNvSpPr txBox="1"/><p:nvPr/></p:nvSpPr>' +
+    '<p:spPr><a:xfrm><a:off x="' + x + '" y="' + y + '"/><a:ext cx="' + cx + '" cy="' + cy + '"/></a:xfrm>' +
+    '<a:prstGeom prst="rect"><a:avLst/></a:prstGeom>' +
+    (o.fill ? '<a:solidFill><a:srgbClr val="' + o.fill + '"/></a:solidFill>' : '<a:noFill/>') +
+    '</p:spPr>' +
+    '<p:txBody><a:bodyPr wrap="square" lIns="0" tIns="45720" rIns="0" bIns="45720" anchor="' + (o.anchor || 't') + '">' +
+    '<a:normAutofit/></a:bodyPr><a:lstStyle/>' + paragraphs.join('') + '</p:txBody></p:sp>';
+}
+
+function tdRect(x, y, cx, cy, color) {
+  var id = ++TD_SHAPE_ID.n;
+  return '<p:sp><p:nvSpPr><p:cNvPr id="' + id + '" name="Rule ' + id + '"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>' +
+    '<p:spPr><a:xfrm><a:off x="' + x + '" y="' + y + '"/><a:ext cx="' + cx + '" cy="' + cy + '"/></a:xfrm>' +
+    '<a:prstGeom prst="rect"><a:avLst/></a:prstGeom>' +
+    '<a:solidFill><a:srgbClr val="' + color + '"/></a:solidFill><a:ln><a:noFill/></a:ln></p:spPr>' +
+    '<p:txBody><a:bodyPr/><a:lstStyle/><a:p><a:endParaRPr lang="en-US"/></a:p></p:txBody></p:sp>';
+}
+
+/* Column widths: the first column carries names, the rest share what is left. */
+function tdColumnWidths(columns, totalWidth, align) {
+  var n = columns.length;
+  if (n === 1) return [totalWidth];
+  var algn = align || columns.map(function (_, i) { return i === 0 ? 'l' : 'r'; });
+  // Label columns hold names and carry more text than a figure does, so they get
+  // a heavier share of the width; the rest split what is left evenly.
+  var weights = algn.map(function (a) { return a === 'l' ? (n <= 3 ? 1.9 : 1.7) : 1; });
+  var total = weights.reduce(function (a, b) { return a + b; }, 0);
+  var widths = weights.map(function (w) { return Math.floor((totalWidth * w) / total); });
+  var used = widths.reduce(function (a, b) { return a + b; }, 0);
+  widths[n - 1] += totalWidth - used;
+  return widths;
+}
+
+function tdCell(text, opts) {
+  var o = opts || {};
+  var body = '<a:txBody><a:bodyPr/><a:lstStyle/>' +
+    tdPara(text, { sz: o.sz || 1200, b: o.b, color: o.color || TD.ink, algn: o.algn || 'l' }) +
+    '</a:txBody>';
+  var margins = ' marL="91440" marR="91440" marT="45720" marB="45720" anchor="ctr"';
+  var fill = o.fill ? '<a:solidFill><a:srgbClr val="' + o.fill + '"/></a:solidFill>' : '<a:noFill/>';
+  var borders =
+    '<a:lnB w="6350" cap="flat" cmpd="sng"><a:solidFill><a:srgbClr val="' + TD.line + '"/></a:solidFill></a:lnB>';
+  return '<a:tc>' + body + '<a:tcPr' + margins + '>' + borders + fill + '</a:tcPr></a:tc>';
+}
+
+// `align` is an array of 'l'/'r' per column. Left-aligned columns are the label
+// columns, so they are the ones that take bold — a two-up metric table has two of
+// them and a comparison table has one, and neither should have to say so twice.
+function tdTable(x, y, cx, columns, rows, align) {
+  var id = ++TD_SHAPE_ID.n;
+  var algn = align && align.length === columns.length
+    ? align
+    : columns.map(function (_, i) { return i === 0 ? 'l' : 'r'; });
+  var widths = tdColumnWidths(columns, cx, algn);
+  var headH = 411480;
+  var rowH = Math.max(274320, Math.min(457200, Math.round((TD.BODY_H - headH) / Math.max(1, rows.length))));
+
+  var xml = '<a:tbl><a:tblPr firstRow="1" bandRow="1"/><a:tblGrid>';
+  widths.forEach(function (w) { xml += '<a:gridCol w="' + w + '"/>'; });
+  xml += '</a:tblGrid>';
+
+  xml += '<a:tr h="' + headH + '">';
+  columns.forEach(function (c, i) {
+    xml += tdCell(c, { b: true, color: TD.paper, fill: TD.navy, sz: 1200, algn: algn[i] });
+  });
+  xml += '</a:tr>';
+
+  rows.forEach(function (row, ri) {
+    xml += '<a:tr h="' + rowH + '">';
+    columns.forEach(function (_, ci) {
+      xml += tdCell(row[ci] == null ? '' : row[ci], {
+        fill: ri % 2 ? TD.band : TD.paper,
+        sz: 1200,
+        algn: algn[ci],
+        b: algn[ci] === 'l'
+      });
+    });
+    xml += '</a:tr>';
+  });
+  xml += '</a:tbl>';
+
+  return '<p:graphicFrame><p:nvGraphicFramePr>' +
+    '<p:cNvPr id="' + id + '" name="Table ' + id + '"/>' +
+    '<p:cNvGraphicFramePr><a:graphicFrameLocks noGrp="1"/></p:cNvGraphicFramePr><p:nvPr/>' +
+    '</p:nvGraphicFramePr>' +
+    '<p:xfrm><a:off x="' + x + '" y="' + y + '"/><a:ext cx="' + cx + '" cy="' + (headH + rowH * rows.length) + '"/></p:xfrm>' +
+    '<a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/table">' +
+    xml + '</a:graphicData></a:graphic></p:graphicFrame>';
+}
+
+/* ---------------------------------------------------------------- slides -- */
+
+function tdSlideXml(slide, index, total) {
+  TD_SHAPE_ID.n = 1;
+  var shapes = [];
+
+  if (slide.kind === 'title') {
+    shapes.push(tdRect(TD.MARGIN, 2011680, 1828800, 45720, TD.navy));
+    shapes.push(tdTextBox(TD.MARGIN, 2286000, TD.CONTENT_W, 1188720,
+      [tdPara(slide.title, { sz: 4000, b: true, color: TD.navy })]));
+    if (slide.subtitle) {
+      shapes.push(tdTextBox(TD.MARGIN, 3566160, TD.CONTENT_W, 640080,
+        [tdPara(slide.subtitle, { sz: 1800, color: TD.muted })]));
+    }
+    if (slide.footnote) {
+      shapes.push(tdTextBox(TD.MARGIN, TD.FOOT_Y, TD.CONTENT_W, TD.FOOT_H,
+        [tdPara(slide.footnote, { sz: 1100, color: TD.muted })]));
+    }
+  } else {
+    shapes.push(tdTextBox(TD.MARGIN, TD.TITLE_Y, TD.CONTENT_W, TD.TITLE_H,
+      [tdPara(slide.title, { sz: 2800, b: true, color: TD.navy })]));
+    shapes.push(tdRect(TD.MARGIN, TD.TITLE_Y + TD.TITLE_H - 45720, 1188720, 27432, TD.navy));
+    if (slide.subtitle) {
+      shapes.push(tdTextBox(TD.MARGIN, TD.SUB_Y, TD.CONTENT_W, TD.SUB_H,
+        [tdPara(slide.subtitle, { sz: 1200, color: TD.muted })]));
+    }
+
+    if (slide.kind === 'table') {
+      shapes.push(tdTable(TD.MARGIN, TD.BODY_Y, TD.CONTENT_W, slide.columns || [], slide.rows || [], slide.align || null));
+    } else {
+      var paras = (slide.bullets || []).map(function (b) {
+        return tdPara(b, { sz: 1400, bullet: true, indent: true, spaceAfter: 800, color: TD.ink });
+      });
+      shapes.push(tdTextBox(TD.MARGIN, TD.BODY_Y, TD.CONTENT_W, TD.BODY_H, paras.length ? paras : [tdPara('')]));
+    }
+
+    if (slide.footnote) {
+      shapes.push(tdTextBox(TD.MARGIN, TD.FOOT_Y, TD.CONTENT_W, TD.FOOT_H,
+        [tdPara(slide.footnote, { sz: 1000, color: TD.muted, i: true })]));
+    }
+    shapes.push(tdTextBox(TD.W - TD.MARGIN - 914400, TD.FOOT_Y + 182880, 914400, 274320,
+      [tdPara(String(index + 1) + ' / ' + total, { sz: 1000, color: TD.muted, algn: 'r' })]));
+  }
+
+  return TD_XML_DECL +
+    '<p:sld ' + TD_NS_P + '><p:cSld><p:spTree>' +
+    '<p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>' +
+    '<p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/>' +
+    '<a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr>' +
+    shapes.join('') +
+    '</p:spTree></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:sld>';
+}
+
+/* --------------------------------------------------------- fixed package -- */
+
+function tdTheme() {
+  var fontScheme = '<a:fontScheme name="Tyre">' +
+    '<a:majorFont><a:latin typeface="' + TD.font + '"/><a:ea typeface=""/><a:cs typeface=""/></a:majorFont>' +
+    '<a:minorFont><a:latin typeface="' + TD.font + '"/><a:ea typeface=""/><a:cs typeface=""/></a:minorFont>' +
+    '</a:fontScheme>';
+  var fill = '<a:solidFill><a:schemeClr val="phClr"/></a:solidFill>';
+  var line = '<a:ln w="9525" cap="flat" cmpd="sng" algn="ctr"><a:solidFill><a:schemeClr val="phClr"/></a:solidFill>' +
+    '<a:prstDash val="solid"/></a:ln>';
+  return TD_XML_DECL +
+    '<a:theme xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" name="Tyre">' +
+    '<a:themeElements>' +
+    '<a:clrScheme name="Tyre">' +
+    '<a:dk1><a:sysClr val="windowText" lastClr="000000"/></a:dk1>' +
+    '<a:lt1><a:sysClr val="window" lastClr="FFFFFF"/></a:lt1>' +
+    '<a:dk2><a:srgbClr val="' + TD.navy + '"/></a:dk2>' +
+    '<a:lt2><a:srgbClr val="' + TD.band + '"/></a:lt2>' +
+    '<a:accent1><a:srgbClr val="' + TD.navy + '"/></a:accent1>' +
+    '<a:accent2><a:srgbClr val="2E6E8E"/></a:accent2>' +
+    '<a:accent3><a:srgbClr val="4F7942"/></a:accent3>' +
+    '<a:accent4><a:srgbClr val="B4762B"/></a:accent4>' +
+    '<a:accent5><a:srgbClr val="8A5A83"/></a:accent5>' +
+    '<a:accent6><a:srgbClr val="A34A3B"/></a:accent6>' +
+    '<a:hlink><a:srgbClr val="0563C1"/></a:hlink>' +
+    '<a:folHlink><a:srgbClr val="954F72"/></a:folHlink>' +
+    '</a:clrScheme>' + fontScheme +
+    '<a:fmtScheme name="Tyre">' +
+    '<a:fillStyleLst>' + fill + fill + fill + '</a:fillStyleLst>' +
+    '<a:lnStyleLst>' + line + line + line + '</a:lnStyleLst>' +
+    '<a:effectStyleLst>' +
+    '<a:effectStyle><a:effectLst/></a:effectStyle>' +
+    '<a:effectStyle><a:effectLst/></a:effectStyle>' +
+    '<a:effectStyle><a:effectLst/></a:effectStyle>' +
+    '</a:effectStyleLst>' +
+    '<a:bgFillStyleLst>' + fill + fill + fill + '</a:bgFillStyleLst>' +
+    '</a:fmtScheme></a:themeElements>' +
+    '<a:objectDefaults/><a:extraClrSchemeLst/></a:theme>';
+}
+
+function tdEmptyTree() {
+  return '<p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>' +
+    '<p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/>' +
+    '<a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr></p:spTree>';
+}
+
+function tdMaster() {
+  return TD_XML_DECL + '<p:sldMaster ' + TD_NS_P + '>' +
+    '<p:cSld><p:bg><p:bgPr><a:solidFill><a:srgbClr val="' + TD.paper + '"/></a:solidFill>' +
+    '<a:effectLst/></p:bgPr></p:bg>' + tdEmptyTree() + '</p:cSld>' +
+    '<p:clrMap bg1="lt1" tx1="dk1" bg2="lt2" tx2="dk2" accent1="accent1" accent2="accent2" ' +
+    'accent3="accent3" accent4="accent4" accent5="accent5" accent6="accent6" hlink="hlink" folHlink="folHlink"/>' +
+    '<p:sldLayoutIdLst><p:sldLayoutId id="2147483649" r:id="rId1"/></p:sldLayoutIdLst>' +
+    '</p:sldMaster>';
+}
+
+function tdLayout() {
+  return TD_XML_DECL + '<p:sldLayout ' + TD_NS_P + ' type="blank" preserve="1">' +
+    '<p:cSld name="Blank">' + tdEmptyTree() + '</p:cSld>' +
+    '<p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:sldLayout>';
+}
+
+function tdPresentation(count) {
+  var ids = '';
+  for (var i = 0; i < count; i++) ids += '<p:sldId id="' + (256 + i) + '" r:id="rId' + (i + 2) + '"/>';
+  return TD_XML_DECL + '<p:presentation ' + TD_NS_P + ' saveSubsetFonts="1">' +
+    '<p:sldMasterIdLst><p:sldMasterId id="2147483648" r:id="rId1"/></p:sldMasterIdLst>' +
+    '<p:sldIdLst>' + ids + '</p:sldIdLst>' +
+    '<p:sldSz cx="' + TD.W + '" cy="' + TD.H + '"/><p:notesSz cx="' + TD.H + '" cy="' + TD.W + '"/>' +
+    '</p:presentation>';
+}
+
+function tdRels(items) {
+  var xml = TD_XML_DECL + '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">';
+  items.forEach(function (it) {
+    xml += '<Relationship Id="' + it.id + '" Type="' + it.type + '" Target="' + it.target + '"/>';
+  });
+  return xml + '</Relationships>';
+}
+
+var TD_REL = {
+  officeDocument: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument',
+  coreProps: 'http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties',
+  extProps: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties',
+  slideMaster: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideMaster',
+  slideLayout: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout',
+  slide: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide',
+  theme: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/theme'
+};
+
+function tdContentTypes(count) {
+  var xml = TD_XML_DECL + '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">' +
+    '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>' +
+    '<Default Extension="xml" ContentType="application/xml"/>' +
+    '<Override PartName="/ppt/presentation.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml"/>' +
+    '<Override PartName="/ppt/slideMasters/slideMaster1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slideMaster+xml"/>' +
+    '<Override PartName="/ppt/slideLayouts/slideLayout1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slideLayout+xml"/>' +
+    '<Override PartName="/ppt/theme/theme1.xml" ContentType="application/vnd.openxmlformats-officedocument.theme+xml"/>' +
+    '<Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/>' +
+    '<Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/>';
+  for (var i = 1; i <= count; i++) {
+    xml += '<Override PartName="/ppt/slides/slide' + i + '.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slide+xml"/>';
+  }
+  return xml + '</Types>';
+}
+
+function tdCoreProps(model) {
+  var stamp = model.generated_at || '2020-01-01T00:00:00Z';
+  return TD_XML_DECL +
+    '<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" ' +
+    'xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" ' +
+    'xmlns:dcmitype="http://purl.org/dc/dcmitype/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">' +
+    '<dc:title>' + tdEsc(model.title || 'Tyre sector') + '</dc:title>' +
+    '<dc:subject>Reviewed quarterly filing extracts</dc:subject>' +
+    '<dcterms:created xsi:type="dcterms:W3CDTF">' + tdEsc(stamp) + '</dcterms:created>' +
+    '<dcterms:modified xsi:type="dcterms:W3CDTF">' + tdEsc(stamp) + '</dcterms:modified>' +
+    '</cp:coreProperties>';
+}
+
+function tdAppProps(count) {
+  return TD_XML_DECL +
+    '<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties" ' +
+    'xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes">' +
+    '<Application>tyre-intelligence-pipeline</Application><Slides>' + count + '</Slides>' +
+    '<ScaleCrop>false</ScaleCrop><LinksUpToDate>false</LinksUpToDate><SharedDoc>false</SharedDoc>' +
+    '<HyperlinksChanged>false</HyperlinksChanged></Properties>';
+}
+
+/* ------------------------------------------------------------------- api -- */
+
+/**
+ * Render a deck model to .pptx bytes.
+ * @param {object} model  TyreCore.buildDeckModel output.
+ * @returns {Uint8Array}
+ */
+function writePptx(model) {
+  var m = model || {};
+  var slides = m.slides || [];
+  if (!slides.length) throw new Error('deck model has no slides');
+
+  var entries = [
+    { name: '[Content_Types].xml', data: tdContentTypes(slides.length) },
+    { name: '_rels/.rels', data: tdRels([
+      { id: 'rId1', type: TD_REL.officeDocument, target: 'ppt/presentation.xml' },
+      { id: 'rId2', type: TD_REL.coreProps, target: 'docProps/core.xml' },
+      { id: 'rId3', type: TD_REL.extProps, target: 'docProps/app.xml' }
+    ]) },
+    { name: 'docProps/core.xml', data: tdCoreProps(m) },
+    { name: 'docProps/app.xml', data: tdAppProps(slides.length) },
+    { name: 'ppt/presentation.xml', data: tdPresentation(slides.length) },
+    { name: 'ppt/theme/theme1.xml', data: tdTheme() },
+    { name: 'ppt/slideMasters/slideMaster1.xml', data: tdMaster() },
+    { name: 'ppt/slideMasters/_rels/slideMaster1.xml.rels', data: tdRels([
+      { id: 'rId1', type: TD_REL.slideLayout, target: '../slideLayouts/slideLayout1.xml' },
+      { id: 'rId2', type: TD_REL.theme, target: '../theme/theme1.xml' }
+    ]) },
+    { name: 'ppt/slideLayouts/slideLayout1.xml', data: tdLayout() },
+    { name: 'ppt/slideLayouts/_rels/slideLayout1.xml.rels', data: tdRels([
+      { id: 'rId1', type: TD_REL.slideMaster, target: '../slideMasters/slideMaster1.xml' }
+    ]) }
+  ];
+
+  var presRels = [{ id: 'rId1', type: TD_REL.slideMaster, target: 'slideMasters/slideMaster1.xml' }];
+  slides.forEach(function (slide, i) {
+    var n = i + 1;
+    presRels.push({ id: 'rId' + (n + 1), type: TD_REL.slide, target: 'slides/slide' + n + '.xml' });
+    entries.push({ name: 'ppt/slides/slide' + n + '.xml', data: tdSlideXml(slide, i, slides.length) });
+    entries.push({ name: 'ppt/slides/_rels/slide' + n + '.xml.rels', data: tdRels([
+      { id: 'rId1', type: TD_REL.slideLayout, target: '../slideLayouts/slideLayout1.xml' }
+    ]) });
+  });
+  presRels.push({ id: 'rId' + (slides.length + 2), type: TD_REL.theme, target: 'theme/theme1.xml' });
+  entries.push({ name: 'ppt/_rels/presentation.xml.rels', data: tdRels(presRels) });
+
+  return tdZip(entries);
+}
+
+/** Convenience for callers that only hold records. */
+function recordsToPptx(records, opts) {
+  var core = (typeof TyreCore !== 'undefined' && TyreCore) ||
+    (typeof window !== 'undefined' && window.TyreCore) ||
+    (typeof globalThis !== 'undefined' && globalThis.TyreCore) || null;
+  if (!core || !core.buildDeckModel) throw new Error('TyreCore.buildDeckModel is not available');
+  return writePptx(core.buildDeckModel(records, opts));
+}
+
+var TyreDeck = {
+  writePptx: writePptx,
+  recordsToPptx: recordsToPptx,
+  slideXml: tdSlideXml,
+  zip: tdZip,
+  crc32: tdCrc32,
+  escapeXml: tdEsc,
+  MIME: 'application/vnd.openxmlformats-officedocument.presentationml.presentation'
+};
+
+if (typeof window !== 'undefined') { window.TyreDeck = TyreDeck; }
+if (typeof globalThis !== 'undefined') { globalThis.TyreDeck = TyreDeck; }
+/* ==== TYRE-DECK:END ==== */
+})();
+</script>
+
 <script>
 const Core = window.TyreCore;
+const TyreDeck = window.TyreDeck;
 const STORAGE_KEY = Core.STORAGE_KEY;
 let records = [];
 let editingId = null;
@@ -2396,6 +3268,34 @@ $('export-excel-btn').addEventListener('click', () => {
   const { wb, attached } = renderWorkbook(model);
   XLSX.writeFile(wb, 'tyre_workbook' + (reviewedOnly ? '_approved' : '_all_records') + '.xlsx');
   toast('Workbook exported — ' + model.generated_for + ' record(s), ' + attached + ' cell comments');
+});
+
+// ---- PowerPoint deck ----
+// TyreDeck is the same inlined renderer pipeline/deck.mjs loads, so the button and
+// the CLI cannot drift into producing different slides. No library involved: a
+// .pptx is a ZIP of XML, and the renderer writes both.
+$('export-deck-btn').addEventListener('click', () => {
+  const reviewedOnly = $('workbook-reviewed-only').checked;
+  const model = Core.buildDeckModel(records, { reviewedOnly, generatedAt: new Date().toISOString() });
+  if (!model.provenance.total){
+    const rejected = records.filter(r => r.review && r.review.status === 'rejected').length;
+    if (reviewedOnly && records.length > rejected){
+      alert('No approved records yet.\n\n' + (records.length - rejected) + ' record(s) are waiting in Review. A deck circulates further than a spreadsheet does, so this export is approved-only by default — approve what you have checked, or untick "Approved records only" to build a draft deck with every unreviewed company marked.');
+    } else {
+      toast('No records for a deck');
+    }
+    return;
+  }
+  let bytes;
+  try {
+    bytes = TyreDeck.writePptx(model);
+  } catch (err){
+    toast('Deck export failed');
+    alert('The deck could not be built: ' + err.message);
+    return;
+  }
+  downloadBlob(bytes, 'tyre_deck_' + String(model.quarter || 'records').replace(/[^A-Za-z0-9]+/g, '_') + (reviewedOnly ? '_approved' : '_draft') + '.pptx', TyreDeck.MIME);
+  toast('Deck exported — ' + model.slides.length + ' slides, ' + model.provenance.total + ' record(s)' + (model.provenance.pending ? ', ' + model.provenance.pending + ' unreviewed' : ''));
 });
 
 // ---- full-data JSON backup / restore (raw records, not the display export) ----
