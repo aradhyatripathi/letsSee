@@ -10,11 +10,13 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
+import zlib from 'node:zlib';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { COMPANIES } from '../pipeline/config/companies.mjs';
 import { fixturePath, listFixtureQuarters, listFixtures, quarterSlug } from '../pipeline/fixtures/index.mjs';
+import { TyreCore } from '../pipeline/lib/core.mjs';
 import { htmlToText, retrieveFiling } from '../pipeline/lib/retrieve.mjs';
 import { extractPdfText, looksLikePdf } from '../pipeline/lib/pdf.mjs';
 
@@ -267,3 +269,80 @@ function buildPdf(lines) {
   pdf += 'trailer\n<< /Size 5 /Root 1 0 R >>\n%%EOF\n';
   return Buffer.from(pdf, 'latin1');
 }
+
+/* ------------------------------------------ regression from the review pass -- */
+
+/** A minimal PDF whose text layer is a UTF-16BE hex string carrying `text`. */
+function pdfWithUtf16Text(text) {
+  const hex = 'FEFF' + [...text].map((c) => c.charCodeAt(0).toString(16).toUpperCase().padStart(4, '0')).join('');
+  const content = Buffer.from(`BT /F1 12 Tf 72 700 Td <${hex}> Tj ET`, 'latin1');
+  const stream = zlibDeflate(content);
+
+  const objs = [
+    Buffer.from('<< /Type /Catalog /Pages 2 0 R >>'),
+    Buffer.from('<< /Type /Pages /Kids [3 0 R] /Count 1 >>'),
+    Buffer.from('<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>'),
+    Buffer.concat([Buffer.from(`<< /Length ${stream.length} /Filter /FlateDecode >>\nstream\n`), stream, Buffer.from('\nendstream')]),
+    Buffer.from('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>')
+  ];
+
+  let buf = Buffer.from('%PDF-1.4\n');
+  const offsets = [];
+  objs.forEach((body, i) => {
+    offsets.push(buf.length);
+    buf = Buffer.concat([buf, Buffer.from(`${i + 1} 0 obj\n`), body, Buffer.from('\nendobj\n')]);
+  });
+  const xrefAt = buf.length;
+  let xref = `xref\n0 ${objs.length + 1}\n0000000000 65535 f \n`;
+  for (const off of offsets) xref += `${String(off).padStart(10, '0')} 00000 n \n`;
+  xref += `trailer\n<< /Size ${objs.length + 1} /Root 1 0 R >>\nstartxref\n${xrefAt}\n%%EOF\n`;
+  return Buffer.concat([buf, Buffer.from(xref)]);
+}
+
+function zlibDeflate(buf) {
+  // eslint-disable-next-line global-require
+  return zlib.deflateSync(buf);
+}
+
+test('a character XML cannot carry never survives retrieval', async () => {
+  // The reachability chain a reviewer demonstrated, pinned end to end. A PDF text string
+  // may be UTF-16BE; pdf.mjs decodes it code unit by code unit, so the byte pair FF FF in
+  // a filing becomes U+FFFF. Everything this project writes is XML underneath, and the
+  // readers that meet an illegal character there do not report an error — they open the
+  // file and silently drop content from that point on.
+  const NOT_A_CHARACTER = '￿';
+  const filing = `Revenue from operations 6,338.42 ${NOT_A_CHARACTER} for the quarter. Total income 6,400.00`;
+
+  await withTempDir(async (dir) => {
+    const pdfPath = join(dir, 'filing.pdf');
+    await writeFile(pdfPath, pdfWithUtf16Text(filing));
+
+    // The decoder itself is faithful — that is its job. The sanitiser is what protects.
+    const decoded = extractPdfText(await readFile(pdfPath));
+    const decodedText = typeof decoded === 'string' ? decoded : decoded.text;
+    assert.ok(decodedText.includes(NOT_A_CHARACTER), 'the decoder reproduces what the PDF actually said');
+
+    const result = await retrieveFiling({ id: 'apollo', name: 'Apollo Tyres', sources: [] },
+      { quarter: 'Q1 FY26', mode: 'fixture', file: pdfPath });
+    assert.equal(result.ok, true, result.error);
+    assert.ok(!result.text.includes(NOT_A_CHARACTER), 'retrieval is the boundary where it stops');
+    assert.match(result.text, /Revenue from operations 6,338\.42/, 'and the rest of the filing survives intact');
+  });
+});
+
+test('a stored record cannot carry one either, whatever route it arrived by', () => {
+  const NOT_A_CHARACTER = '￿';
+  const record = TyreCore.recToStoredShape({
+    company: `CEAT${NOT_A_CHARACTER} Ltd`,
+    quarter: 'Q1 FY26',
+    currency: { code: 'INR', unit: 'Crore' },
+    core: { revenue: 100 },
+    core_quotes: { revenue: `Revenue from operations 100.00${NOT_A_CHARACTER}` },
+    outlook: { commentary: `Rubber eased${NOT_A_CHARACTER}`, rm_trend: null, capex: null }
+  }, { source: 'file:x.pdf' });
+
+  const serialized = JSON.stringify(record);
+  assert.ok(!serialized.includes(NOT_A_CHARACTER), 'nothing unrepresentable reaches storage');
+  assert.equal(record.company, 'CEAT Ltd');
+  assert.equal(record.core.revenue, 100, 'figures are untouched');
+});

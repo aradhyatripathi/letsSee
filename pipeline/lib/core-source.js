@@ -141,6 +141,54 @@ function recordId(company, quarter, source) {
   return slug + '_' + q + '_' + h.toString(36);
 }
 
+/* --------------------------------------------------------------- text safety -- */
+
+// Everything this project writes is XML underneath — .xlsx and .pptx both are — so a
+// character XML 1.0 cannot carry is not a cosmetic problem. It makes the part
+// not-well-formed, and the readers that notice do not report an error: they open the file
+// and silently drop content from that point on.
+//
+// Such characters reach us from real input. A PDF text string may be UTF-16BE, and
+// pdf.mjs decodes it code unit by code unit, so the byte pair FF FF in a filing becomes
+// U+FFFF and travels into a quote or a commentary field without anything objecting.
+//
+// This is applied where text enters (retrieval) and again where a record is stored, so no
+// stored record can carry something the outputs cannot represent. The deck renderer keeps
+// its own copy of the same rule deliberately: it is the last line before bytes are
+// written, and a format guarantee should not depend on an upstream step having run.
+function sanitizeText(value) {
+  var str = String(value == null ? '' : value);
+  var out = '';
+  for (var i = 0; i < str.length; i++) {
+    var c = str.charCodeAt(i);
+    if (c >= 0xd800 && c <= 0xdbff) {
+      var next = i + 1 < str.length ? str.charCodeAt(i + 1) : -1;
+      if (next >= 0xdc00 && next <= 0xdfff) { out += str.charAt(i) + str.charAt(i + 1); i++; }
+      continue;                                   // lone high surrogate
+    }
+    if (c >= 0xdc00 && c <= 0xdfff) continue;     // lone low surrogate
+    if (c === 0xfffe || c === 0xffff) continue;   // not characters
+    if (c === 0x7f) continue;
+    if (c < 0x20 && c !== 0x09 && c !== 0x0a && c !== 0x0d) continue;
+    out += str.charAt(i);
+  }
+  return out;
+}
+
+/** Every string in a record, cleaned. Structure and numbers are untouched. */
+function sanitizeRecordText(node) {
+  if (typeof node === 'string') return sanitizeText(node);
+  if (Array.isArray(node)) return node.map(sanitizeRecordText);
+  if (node && typeof node === 'object') {
+    var out = {};
+    for (var k in node) {
+      if (Object.prototype.hasOwnProperty.call(node, k)) out[k] = sanitizeRecordText(node[k]);
+    }
+    return out;
+  }
+  return node;
+}
+
 /* ------------------------------------------------------------ review state -- */
 
 // One place decides what a record's review state is.
@@ -176,7 +224,9 @@ function usableRecords(records) {
 // model did not report stays null, and quotes stay exactly as returned.
 function recToStoredShape(rec, opts) {
   var o = opts || {};
-  var r = rec || {};
+  // Cleaned on the way in, so no stored record can carry a character the workbook, the
+  // deck or the archive cannot represent.
+  var r = sanitizeRecordText(rec || {});
   var cur = r.currency || {};
   var code = cur.code == null ? null : String(cur.code).trim().toUpperCase() || null;
   var unit = cur.unit == null ? null : String(cur.unit).trim() || null;
@@ -1367,6 +1417,7 @@ var TyreCore = {
   STORAGE_KEY: 'tyre-records-v2',
 
   isNum: isNum,
+  sanitizeText: sanitizeText,
   reviewStatus: reviewStatus,
   isApproved: isApproved,
   isRejected: isRejected,

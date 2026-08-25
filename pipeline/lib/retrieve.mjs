@@ -12,6 +12,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { extname, join, resolve } from 'node:path';
 
 import { fixturePath } from '../fixtures/index.mjs';
+import { TyreCore } from './core.mjs';
 import { extractPdfText, looksLikePdf } from './pdf.mjs';
 
 const FIRECRAWL_ENDPOINT = 'https://api.firecrawl.dev/v1/scrape';
@@ -91,7 +92,11 @@ export async function retrieveFiling(company, options = {}) {
         ms: Date.now() - startedAt
       });
       result.ok = true;
-      result.text = got.text;
+      // One place for every strategy. A PDF text string may be UTF-16BE, and decoding it
+      // code unit by code unit turns the byte pair FF FF in a filing into U+FFFF — a
+      // character XML cannot carry, which would travel into a quote and then into a
+      // workbook or a deck part and quietly truncate it.
+      result.text = TyreCore.sanitizeText(got.text);
       result.source = got.source;
       result.strategy = step.strategy;
       result.bytes = got.bytes;
