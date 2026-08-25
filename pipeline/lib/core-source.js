@@ -799,7 +799,11 @@ function buildWorkbookModel(records, opts) {
   };
 
   /* Core Financials: companies as rows, metrics as columns. */
-  var coreHeader = ['Company', 'Quarter', 'Currency', 'Unit', 'Source'];
+  // A workbook that does not say which rows a person checked lets an unreviewed figure
+  // sit in the same table as a reviewed one, indistinguishable, in the file that
+  // circulates furthest. The column is present whether or not reviewedOnly is set,
+  // because "all of these are approved" is exactly the assumption a reader would make.
+  var coreHeader = ['Company', 'Quarter', 'Review', 'Currency', 'Unit', 'Source'];
   CORE_METRICS.forEach(function (m) { coreHeader.push(m.label); });
   var coreAoa = [coreHeader];
   var META_COLS = coreHeader.length - CORE_METRICS.length;
@@ -808,6 +812,7 @@ function buildWorkbookModel(records, opts) {
     var line = [
       r.company || DASH,
       r.quarter || DASH,
+      reviewLabel(r),
       (r.currency && r.currency.code) || DASH,
       (r.currency && r.currency.unit) || DASH,
       r.source || DASH
@@ -859,7 +864,7 @@ function buildWorkbookModel(records, opts) {
   });
 
   /* Sources & Quotes: the audit sheet every Core Financials cell points at. */
-  var srcAoa = [['Ref', 'Company', 'Quarter', 'Metric', 'Value', 'Currency', 'Unit', 'Source Quote', 'Verification', 'Source']];
+  var srcAoa = [['Ref', 'Company', 'Quarter', 'Review', 'Metric', 'Value', 'Currency', 'Unit', 'Source Quote', 'Verification', 'Source']];
   rows.forEach(function (r) {
     var vmap = {};
     if (r.verification && r.verification.checks) {
@@ -873,6 +878,7 @@ function buildWorkbookModel(records, opts) {
         refFor(r, m.key),
         r.company || DASH,
         r.quarter || DASH,
+        reviewLabel(r),
         m.label,
         isNum(v) ? v : DASH,
         (r.currency && r.currency.code) || DASH,
@@ -887,10 +893,10 @@ function buildWorkbookModel(records, opts) {
   return {
     generated_for: rows.length,
     sheets: [
-      { name: 'Core Financials', aoa: coreAoa, widths: [22, 12, 10, 10, 26].concat(CORE_METRICS.map(function () { return 16; })), freeze: 'F2' },
+      { name: 'Core Financials', aoa: coreAoa, widths: [22, 12, 22, 10, 10, 26].concat(CORE_METRICS.map(function () { return 16; })), freeze: 'G2' },
       { name: 'Segments',        aoa: segAoa,  widths: [22, 12].concat(CHANNEL_KEYS.concat(PRODUCT_KEYS).map(function () { return 16; })), freeze: 'C2' },
       { name: 'Outlook',         aoa: outAoa,  widths: [22, 12, 70, 40, 40], freeze: 'C2', wrap: [2, 3, 4] },
-      { name: 'Sources & Quotes', aoa: srcAoa, widths: [26, 22, 12, 22, 14, 10, 10, 80, 14, 40], freeze: 'B2', wrap: [7] }
+      { name: 'Sources & Quotes', aoa: srcAoa, widths: [26, 22, 12, 22, 22, 14, 10, 10, 80, 14, 40], freeze: 'B2', wrap: [8] }
     ],
     comments: comments
   };
@@ -1287,6 +1293,17 @@ function heldBackNote(p, quarter, dash) {
       ' not shown anywhere in this deck.');
   }
   return parts.length ? parts.join(' ') : null;
+}
+
+// What the review column says. Spelled out rather than a tick, because this ends up in a
+// spreadsheet someone reads a month later with no other context.
+function reviewLabel(r) {
+  var status = reviewStatus(r);
+  if (status === 'approved') {
+    var who = r.review && r.review.reviewer;
+    return who ? 'Approved by ' + who : 'Approved';
+  }
+  return 'NOT REVIEWED';
 }
 
 function companyLabel(r) {
