@@ -18,6 +18,7 @@ import { TyreCore } from './core.mjs';
 
 const EXTRACTION_MAX_TOKENS = 8000;
 const OFFLINE_EXTRACTOR = 'offline-regex';
+const MANUAL_EXTRACTOR = 'claude-manual';
 
 /**
  * Extract one filing with Claude, verifying every quote against the source text.
@@ -244,6 +245,123 @@ export function extractRecordOffline({ sourceText, company, quarter, source = nu
     return result;
   } catch (err) {
     result.error = `${who}: offline extraction failed: ${err.message}`;
+    return result;
+  }
+}
+
+/**
+ * Ingest a model response that was obtained by hand instead of over HTTP.
+ *
+ * The key arrives only after the project is approved, so the API route cannot be
+ * exercised yet. This is the way around that without loosening anything: the
+ * pipeline prints the real prompt (`--emit-prompt`), a person pastes it into a
+ * Claude chat along with the real filing, and pastes the JSON answer back here.
+ * The person is the transport; nothing else changes. The response goes through
+ * the same parseModelJSON -> recToStoredShape -> validateStored -> verifyQuotes
+ * path as an API answer, verified against the same retrieved text, so a quote
+ * this route cannot find in the filing is rejected exactly as it would be live.
+ *
+ * The record is stamped `claude-manual` rather than `claude:<model>` so a reader
+ * can always tell which records crossed the network and which were carried.
+ *
+ * @param {object} options
+ * @param {string} options.sourceText    The retrieved filing text to verify against.
+ * @param {string} options.responseText  The model's raw answer, fenced or bare.
+ * @param {string} options.company
+ * @param {string} options.quarter
+ * @param {string} [options.source]
+ * @param {string} [options.retrievedAt]
+ * @param {string} [options.origin]      Free note on where the answer came from.
+ * @returns {{ok:boolean, record:(object|null), verification:(object|null),
+ *            raw:(string|null), attempts:Array<object>, error:(string|null),
+ *            selection:null, extractor:string}}
+ */
+export function extractRecordFromResponse({
+  sourceText,
+  responseText,
+  company,
+  quarter,
+  source = null,
+  retrievedAt = null,
+  origin = 'pasted response'
+} = {}) {
+  const who = describe(company, quarter);
+  const extractor = MANUAL_EXTRACTOR;
+  const result = {
+    ok: false,
+    record: null,
+    verification: null,
+    raw: null,
+    attempts: [],
+    error: null,
+    selection: null,
+    extractor
+  };
+
+  try {
+    const text = String(sourceText ?? '');
+    if (!text.trim()) {
+      result.error = `${who}: no source text to verify the response against`;
+      return result;
+    }
+    const answer = String(responseText ?? '');
+    if (!answer.trim()) {
+      result.error = `${who}: the response file is empty`;
+      return result;
+    }
+    result.raw = answer;
+
+    let parsed;
+    try {
+      parsed = TyreCore.parseModelJSON(answer);
+    } catch (err) {
+      result.attempts.push({ n: 1, extractor, origin, ok: false, verification: null, error: err.message });
+      result.error =
+        `${who}: could not read JSON from the response (${err.message}). ` +
+        'Paste the whole JSON object the model returned, including its braces — a code fence around it is fine.';
+      return result;
+    }
+
+    const { record, problems, verification } = toVerifiedRecord({
+      parsed,
+      sourceText: text,
+      source,
+      retrievedAt: retrievedAt || new Date().toISOString(),
+      extractor
+    });
+    result.record = record;
+
+    if (problems.length) {
+      result.attempts.push({ n: 1, extractor, origin, ok: false, verification: null, error: problems.join('; ') });
+      result.error = `${who}: the pasted record is not well-formed: ${problems.join('; ')}`;
+      return result;
+    }
+
+    result.verification = verification;
+    result.attempts.push({
+      n: 1,
+      extractor,
+      origin,
+      ok: verification.ok,
+      verification: summarise(verification),
+      error: verification.ok ? null : 'quotes not found in the source'
+    });
+
+    if (!verification.ok) {
+      const failing = verification.checks
+        .filter((c) => c.status !== 'verified' && c.status !== 'unquoted')
+        .map((c) => `${c.key} (${c.status})`);
+      result.error =
+        `${who}: quote verification failed for ${failing.join(', ')}. ` +
+        'The record is attached unaccepted. Re-ask with the correction text the report prints, ' +
+        'or check the filing text pasted into the chat is the same one named by --file.';
+      return result;
+    }
+
+    result.ok = true;
+    return result;
+  } catch (err) {
+    result.error = `${who}: reading the pasted response failed: ${err.message}`;
     return result;
   }
 }

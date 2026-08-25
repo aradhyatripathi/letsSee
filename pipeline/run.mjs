@@ -10,15 +10,15 @@
 // A failure on one company is recorded and the run continues (Section 4, Stages
 // 1 and 2): one awkward investor-relations page must never cost the other eight.
 
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { COMPANIES, QUARTER_DEFAULT, findCompany, selectCompanies } from './config/companies.mjs';
 import { TyreCore } from './lib/core.mjs';
-import { extractRecord, extractRecordOffline } from './lib/extract.mjs';
+import { extractRecord, extractRecordFromResponse, extractRecordOffline } from './lib/extract.mjs';
 import { retrieveFiling } from './lib/retrieve.mjs';
-import { summarizeForConsole, writeRunReport } from './lib/report.mjs';
+import { countFinancialMarkers, summarizeForConsole, writeRunReport } from './lib/report.mjs';
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const DEFAULT_MODEL = 'claude-sonnet-4-6';
@@ -48,6 +48,16 @@ Options
   --concurrency=N          Companies in flight at once. Default: ${DEFAULT_CONCURRENCY}.
   --help                   This text.
 
+Working without an API key
+  --retrieve-only          Run Stage 1 and stop. Reports what each company's site
+                           actually returned. Needs network, needs no key.
+  --emit-prompt            Retrieve, build the real extraction prompt, write it to
+                           runs/<run-id>/prompts/ and stop. Paste it into a Claude
+                           chat by hand.
+  --response=<id>:<path>   Read a pasted JSON answer back in for one company and
+                           verify its quotes against this run's retrieved text,
+                           exactly as a live extraction would be. Repeatable.
+
 Environment
   ANTHROPIC_API_KEY        Required for API extraction. Live mode refuses to start
                            without it rather than quietly producing fixture data.
@@ -59,16 +69,23 @@ Examples
   node pipeline/run.mjs --companies=apollo --mode=live
   node pipeline/run.mjs --file=goodyear:~/Downloads/goodyear-q1fy26.pdf
 
+  # Which investor-relations pages actually work, from a machine with network:
+  node pipeline/run.mjs --mode=live --retrieve-only
+
+  # A real filing through real Claude with no key, in two commands:
+  node pipeline/run.mjs --companies=ceat --file=ceat:~/Downloads/ceat-q1fy26.pdf --emit-prompt
+  node pipeline/run.mjs --companies=ceat --file=ceat:~/Downloads/ceat-q1fy26.pdf --response=ceat:answer.json
+
 Exit code 0 when at least one record was produced, 1 when none were.
 `.trim();
 
-const BOOLEAN_FLAGS = new Set(['help', 'offline-extract']);
-const VALUE_FLAGS = new Set(['companies', 'quarter', 'mode', 'model', 'file', 'out', 'concurrency']);
+const BOOLEAN_FLAGS = new Set(['help', 'offline-extract', 'retrieve-only', 'emit-prompt']);
+const VALUE_FLAGS = new Set(['companies', 'quarter', 'mode', 'model', 'file', 'response', 'out', 'concurrency']);
 
 /* -------------------------------------------------------------------- cli -- */
 
 function parseArgs(argv) {
-  const flags = { file: [] };
+  const flags = { file: [], response: [] };
   for (let i = 0; i < argv.length; i++) {
     const token = argv[i];
     if (!token.startsWith('--')) {
@@ -88,7 +105,7 @@ function parseArgs(argv) {
 
     const value = eq === -1 ? argv[++i] : token.slice(eq + 1);
     if (value === undefined) throw new Error(`--${name} needs a value`);
-    if (name === 'file') flags.file.push(value);
+    if (name === 'file' || name === 'response') flags[name].push(value);
     else flags[name] = value;
   }
   return flags;
@@ -112,30 +129,44 @@ function resolveOptions(flags) {
     throw new Error(`--concurrency must be a positive integer, got '${flags.concurrency}'`);
   }
 
-  const files = new Map();
-  for (const spec of flags.file) {
-    const split = spec.indexOf(':');
-    if (split < 1) throw new Error(`--file expects <company-id>:<path>, got '${spec}'`);
-    const id = spec.slice(0, split).trim();
-    const path = spec.slice(split + 1).trim();
-    if (!path) throw new Error(`--file expects <company-id>:<path>, got '${spec}'`);
-    const company = findCompany(id);
-    if (!company) throw new Error(`--file names an unknown company '${id}'`);
-    if (!companies.some((c) => c.id === company.id)) {
-      throw new Error(`--file names ${company.name}, which is not in --companies — add it or drop the file`);
-    }
-    files.set(company.id, expandHome(path));
+  const files = parsePerCompanyPaths(flags.file, 'file', companies);
+  const responses = parsePerCompanyPaths(flags.response, 'response', companies);
+
+  // Three ways to stop early, all of them ways to make progress without a key.
+  // They are exclusive because each answers a different question and running two
+  // at once would silently drop one of the answers.
+  const retrieveOnly = flags['retrieve-only'] === true;
+  const emitPrompt = flags['emit-prompt'] === true;
+  if (retrieveOnly && emitPrompt) {
+    throw new Error('--retrieve-only and --emit-prompt do different things; pick one');
   }
+  if (retrieveOnly && responses.size) {
+    throw new Error('--retrieve-only stops before extraction, so --response would be ignored');
+  }
+  if (emitPrompt && responses.size) {
+    throw new Error('--emit-prompt writes the prompt to send; --response reads the answer back. Run them as two commands');
+  }
+  const stopAfter = retrieveOnly ? 'retrieval' : emitPrompt ? 'prompt' : null;
 
   const apiKey = (process.env.ANTHROPIC_API_KEY || '').trim() || null;
   let offlineExtract = flags['offline-extract'] === true;
   let offlineImplied = false;
-  if (!offlineExtract && !apiKey) {
+
+  // Every company either stops before extraction, has a pasted answer waiting, or
+  // is extracted here. Only the last of those needs a key, so the three key-free
+  // routes stay open in live mode — which is the whole point of them.
+  const needsApi =
+    !stopAfter && !offlineExtract && companies.some((c) => !responses.has(c.id));
+
+  if (needsApi && !apiKey) {
     if (mode === 'live') {
       throw new Error(
-        'live mode needs an API key for extraction.\n' +
-        '  Set it:              export ANTHROPIC_API_KEY=sk-ant-...\n' +
-        '  Or extract offline:  node pipeline/run.mjs --mode=live --offline-extract\n' +
+        'live mode needs an API key to extract, and none of the key-free routes are selected.\n' +
+        '  Set a key:             export ANTHROPIC_API_KEY=sk-ant-...\n' +
+        '  Retrieve only:         node pipeline/run.mjs --mode=live --retrieve-only\n' +
+        '  Print the prompt:      node pipeline/run.mjs --mode=live --emit-prompt\n' +
+        '  Read an answer back:   node pipeline/run.mjs --response=<id>:<file.json>\n' +
+        '  Extract deterministically: --offline-extract\n' +
         'Refusing to start rather than retrieving live filings and silently producing ' +
         'deterministic placeholder records that look like model output.'
       );
@@ -151,12 +182,35 @@ function resolveOptions(flags) {
     model,
     concurrency,
     files,
+    responses,
+    stopAfter,
     apiKey,
     offlineExtract,
     offlineImplied,
     firecrawlKey: (process.env.FIRECRAWL_API_KEY || '').trim() || null,
     out: flags.out ? resolve(process.cwd(), expandHome(flags.out)) : null
   };
+}
+
+// --file and --response share one grammar: <company-id>:<path>, repeatable, and
+// rejected up front if the company is not in this run rather than being ignored
+// halfway through it.
+function parsePerCompanyPaths(specs, flagName, companies) {
+  const out = new Map();
+  for (const spec of specs) {
+    const split = spec.indexOf(':');
+    if (split < 1) throw new Error(`--${flagName} expects <company-id>:<path>, got '${spec}'`);
+    const id = spec.slice(0, split).trim();
+    const path = spec.slice(split + 1).trim();
+    if (!path) throw new Error(`--${flagName} expects <company-id>:<path>, got '${spec}'`);
+    const company = findCompany(id);
+    if (!company) throw new Error(`--${flagName} names an unknown company '${id}'`);
+    if (!companies.some((c) => c.id === company.id)) {
+      throw new Error(`--${flagName} names ${company.name}, which is not in --companies — add it or drop the ${flagName}`);
+    }
+    out.set(company.id, expandHome(path));
+  }
+  return out;
 }
 
 function expandHome(path) {
@@ -180,6 +234,7 @@ async function processCompany(company, opts, runDir) {
     verification: null,
     issues: [],
     record: null,
+    prompt: null,
     duration_ms: 0
   };
 
@@ -199,7 +254,10 @@ async function processCompany(company, opts, runDir) {
     bytes: retrieval.bytes,
     path: retrieval.path || null,
     error: retrieval.error,
-    attempts: retrieval.attempts || []
+    attempts: retrieval.attempts || [],
+    // Counted here, where the text is, so the report can tell a filing apart from
+    // a cookie wall that returned 200 without carrying the whole document around.
+    financial_markers: retrieval.ok ? countFinancialMarkers(retrieval.text) : null
   };
 
   if (!retrieval.ok) {
@@ -208,17 +266,67 @@ async function processCompany(company, opts, runDir) {
     return entry;
   }
 
-  entry.stage = 'extraction';
-  const engine = opts.offlineExtract ? 'offline' : 'api';
+  // --retrieve-only. Answers "does this company's site actually give us a filing",
+  // which is the one question no amount of work in this container can settle, and
+  // which a person with an ordinary internet connection can settle in a minute.
+  if (opts.stopAfter === 'retrieval') {
+    entry.ok = true;
+    entry.stage = 'retrieved';
+    entry.duration_ms = Date.now() - startedAt;
+    return entry;
+  }
+
   const args = {
     sourceText: retrieval.text,
     company: company.name,
     quarter: opts.quarter,
     source: retrieval.source
   };
-  const extraction = opts.offlineExtract
-    ? await extractRecordOffline(args)
-    : await extractRecord({ ...args, apiKey: opts.apiKey, model: opts.model });
+
+  // --emit-prompt. Writes exactly what would have gone over the wire, so it can
+  // be carried to a Claude chat by hand while there is no key to send it with.
+  if (opts.stopAfter === 'prompt') {
+    entry.stage = 'prompt';
+    const prompt = TyreCore.buildExtractionPrompt(retrieval.text, {
+      company: company.name,
+      quarter: opts.quarter
+    });
+    const promptPath = join(runDir, 'prompts', `${company.id}.txt`);
+    await mkdir(dirname(promptPath), { recursive: true });
+    await writeFile(promptPath, `${promptText(prompt)}\n`, 'utf8');
+    entry.prompt = {
+      path: promptPath,
+      chars: prompt.system.length + prompt.user.length,
+      selection: prompt.selection || null,
+      source_path: retrieval.path || null
+    };
+    entry.ok = true;
+    entry.duration_ms = Date.now() - startedAt;
+    return entry;
+  }
+
+  entry.stage = 'extraction';
+  const responsePath = opts.responses.get(company.id) || null;
+  const engine = responsePath ? 'manual' : opts.offlineExtract ? 'offline' : 'api';
+
+  let extraction;
+  if (responsePath) {
+    // --response. The answer came back in a person's clipboard rather than an HTTP
+    // response; it is verified against this run's retrieved text all the same.
+    let responseText;
+    try {
+      responseText = await readFile(responsePath, 'utf8');
+    } catch (err) {
+      entry.error = `${company.name}: could not read the response file ${responsePath} — ${err.message}`;
+      entry.duration_ms = Date.now() - startedAt;
+      return entry;
+    }
+    extraction = extractRecordFromResponse({ ...args, responseText, origin: responsePath });
+  } else if (opts.offlineExtract) {
+    extraction = await extractRecordOffline(args);
+  } else {
+    extraction = await extractRecord({ ...args, apiKey: opts.apiKey, model: opts.model });
+  }
 
   entry.extraction = {
     ok: extraction.ok,
@@ -266,6 +374,68 @@ function finalizeRecord(raw, { source, retrievedAt, verification }) {
   return record;
 }
 
+// The API sends the guardrails as a system prompt and the filing as the user
+// turn. A chat window has no system slot, so the two are concatenated with a
+// visible rule between them — same words, same order, one paste.
+function promptText(prompt) {
+  return [
+    '=== INSTRUCTIONS (system prompt) ===',
+    '',
+    prompt.system,
+    '',
+    '=== FILING (user message) ===',
+    '',
+    prompt.user
+  ].join('\n');
+}
+
+// Written next to the prompts so the second half of the round trip does not have
+// to be remembered or reconstructed — including the source path, because the
+// answer is verified against the same text the prompt was built from.
+function promptsReadme(runResult, entries) {
+  const done = entries.filter((e) => e.ok && e.prompt);
+  const lines = [
+    '# Extraction prompts — carry these by hand',
+    '',
+    `Run \`${runResult.run_id}\` · ${runResult.quarter} · ${done.length} compan${done.length === 1 ? 'y' : 'ies'}`,
+    '',
+    'There is no API key yet, so nothing here was sent anywhere. Each `.txt` below is',
+    'exactly what the pipeline would have sent: the same guardrails, the same schema,',
+    'the same filing text. You are the transport.',
+    '',
+    '## For each company',
+    '',
+    '1. Open the `.txt` file and paste the whole thing into a Claude chat.',
+    '2. Copy the JSON object that comes back into a file, say `answer.json`.',
+    '   A code fence around it is fine; anything before or after it is fine.',
+    '3. Feed it back with the command printed under that company below.',
+    '',
+    'Step 3 verifies every quote against the same filing text this prompt was built',
+    'from. A quote that is not in the filing is rejected there, exactly as it would',
+    'be on a live run — carrying the answer by hand does not skip the gate.',
+    ''
+  ];
+  for (const e of done) {
+    const src = e.prompt.source_path ? ` --file=${e.id}:${e.prompt.source_path}` : '';
+    lines.push(
+      `## ${e.name}`,
+      '',
+      `- prompt: \`${e.prompt.path}\` (${e.prompt.chars.toLocaleString('en-US')} characters)`,
+      `- retrieved text: \`${e.prompt.source_path || '(not written to disk)'}\``,
+      '',
+      '```',
+      `node pipeline/run.mjs --companies=${e.id} --quarter=${JSON.stringify(runResult.quarter)}${src} \\`,
+      `  --response=${e.id}:<path-to-answer.json>`,
+      '```',
+      ''
+    );
+  }
+  if (!done.length) {
+    lines.push('No prompts were written — every company failed before extraction. See `report.md`.', '');
+  }
+  return lines.join('\n');
+}
+
 /* -------------------------------------------------------------------- run -- */
 
 async function mapWithConcurrency(items, limit, worker) {
@@ -284,6 +454,13 @@ function progressLine(entry, index, total) {
   const tag = `[${String(index + 1).padStart(String(total).length, ' ')}/${total}]`;
   if (!entry.ok) {
     return `${tag} ${entry.name}: FAILED at ${entry.stage} — ${entry.error}`;
+  }
+  if (entry.stage === 'retrieved') {
+    const r = entry.retrieval;
+    return `${tag} ${entry.name}: ${r.strategy} → ${r.bytes.toLocaleString('en-US')} characters from ${r.source}`;
+  }
+  if (entry.stage === 'prompt') {
+    return `${tag} ${entry.name}: prompt written — ${entry.prompt.chars.toLocaleString('en-US')} characters to carry`;
   }
   const v = entry.verification;
   const values = TyreCore.CORE_KEYS.filter((k) => TyreCore.isNum(entry.record.core[k])).length;
@@ -318,7 +495,17 @@ async function main(argv) {
   const log = (line) => process.stderr.write(`${line}\n`);
   log(`Run ${runId} — ${opts.quarter} — ${opts.companies.length} compan${opts.companies.length === 1 ? 'y' : 'ies'}`);
   log(`  retrieval: ${opts.mode}${opts.mode === 'live' && opts.firecrawlKey ? ' (Firecrawl first)' : ''}`);
-  log(`  extraction: ${opts.offlineExtract ? `offline deterministic extractor${opts.offlineImplied ? ' (no ANTHROPIC_API_KEY set)' : ''}` : `Claude API, ${opts.model}`}`);
+  if (opts.stopAfter === 'retrieval') {
+    log('  extraction: skipped — --retrieve-only stops after Stage 1');
+  } else if (opts.stopAfter === 'prompt') {
+    log('  extraction: not run — --emit-prompt writes the prompt for a person to carry');
+  } else if (opts.responses.size) {
+    const carried = [...opts.responses.keys()].join(', ');
+    const rest = opts.companies.filter((c) => !opts.responses.has(c.id)).length;
+    log(`  extraction: pasted answers for ${carried}${rest ? `; ${rest} other${rest === 1 ? '' : 's'} ${opts.offlineExtract ? 'offline' : `via Claude API, ${opts.model}`}` : ''}`);
+  } else {
+    log(`  extraction: ${opts.offlineExtract ? `offline deterministic extractor${opts.offlineImplied ? ' (no ANTHROPIC_API_KEY set)' : ''}` : `Claude API, ${opts.model}`}`);
+  }
   if (opts.files.size) {
     log(`  manual uploads: ${[...opts.files.entries()].map(([id, path]) => `${id} → ${path}`).join(', ')}`);
   }
@@ -362,8 +549,15 @@ async function main(argv) {
     run_id: runId,
     quarter: opts.quarter,
     mode: opts.mode,
-    model: opts.offlineExtract ? null : opts.model,
-    extractor: opts.offlineExtract ? 'offline' : 'api',
+    stop_after: opts.stopAfter,
+    model: opts.offlineExtract || opts.stopAfter ? null : opts.model,
+    extractor: opts.stopAfter
+      ? `stopped-after-${opts.stopAfter}`
+      : opts.responses.size
+        ? 'manual'
+        : opts.offlineExtract
+          ? 'offline'
+          : 'api',
     generated_at: finishedAt.toISOString(),
     started_at: startedAt.toISOString(),
     duration_ms: finishedAt - startedAt,
@@ -373,6 +567,10 @@ async function main(argv) {
     companies,
     records
   };
+
+  if (opts.stopAfter === 'prompt') {
+    await writeFile(join(runDir, 'prompts', 'README.md'), promptsReadme(runResult, companies), 'utf8');
+  }
 
   await mkdir(dirname(recordsPath), { recursive: true });
   await writeFile(
@@ -396,6 +594,16 @@ async function main(argv) {
 
   log('');
   process.stdout.write(`${summarizeForConsole(runResult)}\n`);
+
+  // A stop-early run produces no records by design, so "did anything work" is the
+  // count of companies that reached the stopping point rather than the record count.
+  if (opts.stopAfter) {
+    const reached = companies.filter((c) => c.ok).length;
+    if (opts.stopAfter === 'prompt' && reached) {
+      process.stdout.write(`\nNext: ${join(runDir, 'prompts', 'README.md')}\n`);
+    }
+    return reached ? 0 : 1;
+  }
   return records.length ? 0 : 1;
 }
 
