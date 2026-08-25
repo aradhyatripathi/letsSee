@@ -1,0 +1,121 @@
+*** SYNTHETIC TEST DATA — fixture for offline pipeline runs. Not a real filing. ***
+
+JK TYRE & INDUSTRIES LIMITED
+CIN: L67120MH1951PLC008480
+Registered Office: Jaykaygram, PO Tyre Factory, Kankroli 313 342, Rajasthan
+Corporate Office: 3 Bahadur Shah Zafar Marg, New Delhi 110 002
+
+STATEMENT OF AUDITED CONSOLIDATED FINANCIAL RESULTS
+FOR THE QUARTER ENDED 31ST MARCH, 2025
+(Rs. in Crore)
+
+                                                      Quarter ended  Quarter ended  Quarter ended
+Particulars                                            31.03.2025     31.12.2024     31.03.2024
+                                                        (Audited)     (Unaudited)     (Audited)
+--------------------------------------------------------------------------------------------------
+1.  Revenue from operations                              3,612.88       3,548.20       3,690.45
+2.  Other income                                            20.55          18.92          21.88
+3.  Total income (1+2)                                   3,633.43       3,567.12       3,712.33
+4.  Expenses
+    (a) Cost of materials consumed                       2,099.08       2,048.66       2,013.77
+    (b) Purchases of stock-in-trade                         90.32          87.55          92.14
+    (c) Changes in inventories                               8.44        (14.32)           6.05
+    (d) Employee benefits expense                          339.61         331.44         305.28
+    (e) Finance costs                                      104.66         108.21         121.36
+    (f) Depreciation and amortisation expense              152.18         149.87         143.02
+    (g) Other expenses                                     686.99         683.10         730.55
+    Total expenses                                       3,481.28       3,394.51       3,412.17
+5.  Profit before tax (3-4)                                152.15         172.61         300.16
+6.  Tax expense
+    (a) Current tax                                         43.10          48.30          79.60
+    (b) Deferred tax                                       (3.54)         (3.62)         (3.86)
+    Total tax expense                                       39.56          44.68          75.74
+7.  Profit for the period (5-6)                            112.59         127.93         224.42
+8.  Other comprehensive income (net of tax)                  1.66           1.24         (1.35)
+9.  Total comprehensive income (7+8)                       114.25         129.17         223.07
+10. Paid-up equity share capital
+    (face value Rs. 2 per share)                            54.62          54.62          54.62
+11. Earnings per share (not annualised), basic
+    and diluted (Rs.)                                        4.12           4.68           8.22
+--------------------------------------------------------------------------------------------------
+
+Note 6
+EBITDA for the quarter ended 31st March, 2025 was Rs. 388.44 Crore with an EBITDA margin of
+10.8% (quarter ended 31st December, 2024: Rs. 411.77 Crore, 11.6%; quarter ended 31st March,
+2024: Rs. 542.66 Crore, 14.7%).
+
+STATEMENT OF ASSETS AND LIABILITIES AS AT 31ST MARCH, 2025 (EXTRACT) — AUDITED
+(Rs. in Crore)
+--------------------------------------------------------------------------------------------------
+Total assets                                            12,742.30
+Total equity                                             3,988.60
+Total liabilities                                        8,753.70
+    Total borrowings                                     4,268.55
+    Trade payables                                       1,702.44
+Current assets                                           4,015.88
+    Inventories                                          1,908.22
+    Trade receivables                                    1,596.30
+    Cash and cash equivalents                              292.66
+Current liabilities                                      4,392.15
+--------------------------------------------------------------------------------------------------
+
+DISCLOSURES UNDER REGULATION 52(4) OF THE SEBI (LODR) REGULATIONS, 2015
+Debt-equity ratio                                             1.07
+Current ratio                                                 0.91
+Quick ratio                                                   0.48
+Interest service coverage ratio                               2.26
+Inventory turnover ratio (annualised)                         4.61 times
+Debtors turnover — days sales outstanding                       40 days
+Creditors turnover — days payable outstanding                   70 days
+
+CASH FLOW EXTRACT FOR THE QUARTER ENDED 31ST MARCH, 2025 — AUDITED (Rs. in Crore)
+--------------------------------------------------------------------------------------------------
+Net cash generated from operating activities                388.15
+Purchase of property, plant and equipment                   214.60
+Free cash flow (net operating cash flow less capex)         173.55
+Repayment of long-term borrowings                          (145.80)
+--------------------------------------------------------------------------------------------------
+
+SEGMENT AND CHANNEL DISCLOSURE — QUARTER ENDED 31ST MARCH, 2025
+Revenue from operations by channel:
+    Replacement                                              65%
+    Original equipment                                       25%
+    Exports                                                  10%
+
+Revenue from operations by product category:
+    Truck and bus radial (TBR)                               41%
+    Truck and bus bias (TBB)                                 12%
+    Passenger car radial (PCR)                               21%
+    Two-wheeler (2W)                                          3%
+    Off-highway tyres (OHT)                                  15%
+    Others                                                    8%
+
+MANAGEMENT COMMENTARY
+Replacement demand firmed up through the March quarter as fleet utilisation recovered after
+a subdued festive period, and off-highway volumes benefited from a better rabi season; the
+original equipment channel, however, remained soft in medium and heavy commercial vehicles,
+so consolidated revenue grew only modestly over the December quarter. Realisations were
+broadly flat, the pricing actions taken earlier in the year having been largely absorbed by
+discounting in passenger car radials.
+
+The margin compression of the last three quarters continued. Natural rubber remained the
+principal drag, with domestic RSS-4 averaging close to a fifth above the March 2024 quarter,
+while carbon black and synthetic rubber tracked crude higher and imported feedstock landed
+costlier on a weaker rupee; gross margin was some 340 basis points below the corresponding
+quarter of the previous year. Cost of materials consumed at Rs. 2,099.08 Crore was 58.1% of
+sales against 54.6% a year earlier.
+
+Capital expenditure of Rs. 214.60 Crore in the quarter — Rs. 688 Crore for the full year —
+went principally to the passenger car radial line at Banmore, the mixing capacity at
+Chennai and to solar and biomass installations across the Kankroli and Mysuru plants. Gross
+borrowings were reduced by Rs. 145.80 Crore during the quarter and the Company continues to
+target a debt-equity ratio below 1.0 by the close of FY26.
+
+The results were reviewed by the Audit Committee and approved by the Board of Directors at
+its meeting held on 8th May, 2025. The statutory auditors have audited these results and
+have issued an unmodified opinion thereon.
+
+For JK Tyre & Industries Limited
+Chairman and Managing Director
+New Delhi
+8th May, 2025

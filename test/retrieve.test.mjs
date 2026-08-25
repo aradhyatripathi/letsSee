@@ -14,7 +14,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { COMPANIES } from '../pipeline/config/companies.mjs';
-import { fixturePath, listFixtures } from '../pipeline/fixtures/index.mjs';
+import { fixturePath, listFixtureQuarters, listFixtures, quarterSlug } from '../pipeline/fixtures/index.mjs';
 import { htmlToText, retrieveFiling } from '../pipeline/lib/retrieve.mjs';
 import { extractPdfText, looksLikePdf } from '../pipeline/lib/pdf.mjs';
 
@@ -29,40 +29,64 @@ async function withTempDir(fn) {
 
 /* ------------------------------------------------------------ fixture mode -- */
 
-test('fixture mode returns text for every company on the roster', async () => {
+test('fixture mode returns text for every company, in every quarter on disk', async () => {
   // The roster is a config list, not a fixed number — the spec says nine but also
   // says to use whichever list the scoping note actually named, so this asserts
   // breadth (every company runs) rather than a count that would need editing here
-  // every time a company is added or dropped.
+  // every time a company is added or dropped. The same now goes for quarters: every
+  // quarter directory must cover the whole roster, or an offline run of that quarter
+  // silently loses a company.
   assert.ok(COMPANIES.length >= 2, 'the spec asks for real breadth, not a two-company demo');
 
-  for (const company of COMPANIES) {
-    const result = await retrieveFiling(company, { quarter: 'Q1 FY26' });
+  const quarters = [
+    { label: 'Q1 FY26', slug: 'q1-fy26' },
+    { label: 'Q4 FY25', slug: 'q4-fy25' }
+  ];
+  assert.deepEqual(
+    listFixtureQuarters(),
+    quarters.map((q) => q.slug).sort(),
+    'the quarters on disk are the quarters this test covers'
+  );
 
-    assert.equal(result.ok, true, `${company.name}: ${result.error}`);
-    assert.equal(result.error, null);
-    assert.equal(result.strategy, 'fixture');
-    assert.equal(result.source, `fixture:${company.id}.txt`);
-    assert.equal(result.company, company.name);
-    assert.equal(result.quarter, 'Q1 FY26');
-    assert.ok(result.bytes > 1000, `${company.name}: only ${result.bytes} bytes`);
-    assert.ok(
-      result.text.startsWith('*** SYNTHETIC TEST DATA'),
-      `${company.name}: a fixture must announce that it is not a real filing`
+  for (const quarter of quarters) {
+    for (const company of COMPANIES) {
+      const result = await retrieveFiling(company, { quarter: quarter.label });
+      const who = `${company.name} ${quarter.label}`;
+
+      assert.equal(result.ok, true, `${who}: ${result.error}`);
+      assert.equal(result.error, null);
+      assert.equal(result.strategy, 'fixture');
+      assert.equal(
+        result.source,
+        `fixture:${quarter.slug}/${company.id}.txt`,
+        `${who}: the source has to name the quarter, or two quarters of one company are indistinguishable`
+      );
+      assert.equal(result.company, company.name);
+      assert.equal(result.quarter, quarter.label);
+      assert.ok(result.bytes > 1000, `${who}: only ${result.bytes} bytes`);
+      assert.ok(
+        result.text.startsWith('*** SYNTHETIC TEST DATA'),
+        `${who}: a fixture must announce that it is not a real filing`
+      );
+      assert.ok(/Revenue from operations/i.test(result.text), `${who}: fixture has no income statement`);
+      assert.ok(
+        !/FY26 Q1|Q1 FY26/.test(result.text) || quarter.label === 'Q1 FY26' || /for FY26|outlook/i.test(result.text),
+        `${who}: reads like the wrong quarter`
+      );
+    }
+
+    const onDisk = new Set(listFixtures(quarter.label).map((f) => f.id));
+    const missing = COMPANIES.filter((c) => !onDisk.has(c.id)).map((c) => c.id);
+    assert.deepEqual(
+      missing,
+      [],
+      `every configured company needs a fixture in every quarter or it has no offline coverage — create ` +
+        missing.map((id) => `pipeline/fixtures/${quarterSlug(quarter.label)}/${id}.txt`).join(', ')
     );
-    assert.ok(/Revenue from operations/i.test(result.text), `${company.name}: fixture has no income statement`);
   }
 
   const onDisk = new Set(listFixtures().map((f) => f.id));
-  const missing = COMPANIES.filter((c) => !onDisk.has(c.id)).map((c) => c.id);
   const orphans = [...onDisk].filter((id) => !COMPANIES.some((c) => c.id === id));
-
-  assert.deepEqual(
-    missing,
-    [],
-    `every configured company needs a fixture or it has no offline coverage — create ` +
-      missing.map((id) => `pipeline/fixtures/${id}.txt`).join(', ')
-  );
 
   // A fixture left behind by a company that has since been dropped costs nothing
   // and should not fail a build, but it is worth saying out loud so it can be

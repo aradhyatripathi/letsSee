@@ -54,8 +54,9 @@ npm test          # the contract tests; no network, no key
 npm run demo      # retrieval check, full run, a draft deck, and the archive refusing it
 ```
 
-`npm run demo` is the whole thing end to end and finishes by telling you how to do the
-review for real. It stops short of approving anything on purpose — a script that ticked
+`npm run demo` is the whole thing end to end — two quarters, so the quarter-on-quarter
+deltas and the deck's trend slides have something to compute — and it finishes by telling
+you how to do the review for real. It stops short of approving anything on purpose — a script that ticked
 the review box would be manufacturing a review while demonstrating a system whose entire
 argument is that it doesn't.
 
@@ -76,7 +77,9 @@ on `file://` URLs, so records would vanish on reload.
 
 Two caveats worth stating plainly. The fixture filings are **synthetic test data** — each
 says so on its first line, the numbers are invented, and no figure in them should ever be
-quoted as real. And the dashboard loads SheetJS, Chart.js and pdf.js from a CDN, so with
+quoted as real. (Two quarters are on disk, Q4 FY25 and Q1 FY26. Where a company's Q1 FY26
+filing carries comparative columns, the Q4 FY25 fixture restates that column exactly, so
+the two agree about the same quarter the way successive real filings do.) And the dashboard loads SheetJS, Chart.js and pdf.js from a CDN, so with
 no connection the Excel export stays disabled and charts do not render. Review, compare,
 import, the deck export and the delta views work regardless — the deck writer is
 hand-rolled precisely so it needs nothing.
@@ -286,8 +289,9 @@ written to `localStorage`.
 `pipeline/config/companies.mjs` is the only file that knows which companies exist, and
 nothing anywhere assumes a count — the suite has been run green at two, three, four,
 five, six, seven and nine. Add or remove entries freely; the only follow-up is a fixture
-per new company id (`pipeline/fixtures/<id>.txt`) so offline runs keep covering it, which
-the tests will tell you about by name if you forget.
+per new company id in each quarter directory (`pipeline/fixtures/<quarter-slug>/<id>.txt`)
+so offline runs keep covering it, which the tests will tell you about by name if you
+forget.
 
 ## Repo layout
 
@@ -297,7 +301,7 @@ pipeline/
   deck.mjs                 the sector deck, from a records file
   archive.mjs              the cross-quarter archive of reviewed records
   config/companies.mjs     the roster and each company's ordered sources
-  fixtures/                synthetic filings, one per company, for offline runs
+  fixtures/<quarter>/      synthetic filings, one per company per quarter, offline runs
   lib/
     core-source.js         THE SHARED DATA CONTRACT — schema, transforms, quote
                            verification, prompts, workbook and deck models. Plain

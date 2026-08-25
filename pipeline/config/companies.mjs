@@ -9,9 +9,9 @@
 // comparison this pipeline exists to produce. The count is not load-bearing:
 // changing the roster means editing this list and nothing else — nothing in the
 // pipeline, the dashboard or the tests assumes a number. Add or remove entries
-// freely; the only follow-up is a fixture per new company id
-// (pipeline/fixtures/<id>.txt) so offline runs keep covering it, which the test
-// suite will tell you about by name if you forget.
+// freely; the only follow-up is a fixture per new company id in each quarter
+// directory (pipeline/fixtures/<quarter-slug>/<id>.txt) so offline runs keep
+// covering it, which the test suite will tell you about by name if you forget.
 //
 // `sources` is ordered: the pipeline tries each in turn and records which one
 // worked, so a company whose IR page is awkward does not block the rest.

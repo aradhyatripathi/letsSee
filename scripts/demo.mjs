@@ -11,7 +11,7 @@
 // The filings behind it are synthetic. Every fixture says so on its first line.
 
 import { spawn } from 'node:child_process';
-import { mkdir, readFile, rm } from 'node:fs/promises';
+import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -19,6 +19,10 @@ import { COMPANIES } from '../pipeline/config/companies.mjs';
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const OUT_DIR = join(REPO_ROOT, 'demo-output');
+
+// Oldest first. Two quarters rather than one because a single snapshot leaves the
+// quarter-on-quarter deltas and the deck's trend slides with nothing to compute.
+const QUARTERS = ['Q4 FY25', 'Q1 FY26'];
 
 const BOLD = process.stdout.isTTY ? '\u001b[1m' : '';
 const DIM = process.stdout.isTTY ? '\u001b[2m' : '';
@@ -68,14 +72,31 @@ async function main() {
   for (const line of retrieval.out.split('\n').filter((l) => l.trim().startsWith('- '))) say(`  ${line.trim()}`);
   say(`  ${DIM}Against live sites this is the command that answers "which IR pages actually work".${OFF}`);
 
-  step(2, TOTAL, 'Extract, verify every quote, and store');
+  step(2, TOTAL, 'Extract, verify every quote, and store — two quarters');
   const recordsPath = join(OUT_DIR, 'records.json');
-  const extract = await run(['pipeline/run.mjs', `--out=${recordsPath}`]);
-  if (extract.code !== 0) {
-    say(extract.err || extract.out);
-    throw new Error('the run failed');
+  const perQuarter = [];
+  for (const quarter of QUARTERS) {
+    const out = join(OUT_DIR, `records-${quarter.replace(/\W+/g, '-').toLowerCase()}.json`);
+    const extract = await run(['pipeline/run.mjs', `--quarter=${quarter}`, `--out=${out}`]);
+    if (extract.code !== 0) {
+      say(extract.err || extract.out);
+      throw new Error(`the ${quarter} run failed`);
+    }
+    perQuarter.push(JSON.parse(await readFile(out, 'utf8')));
   }
-  const payload = JSON.parse(await readFile(recordsPath, 'utf8'));
+  // Merged so the dashboard and the deck see a history rather than a snapshot: this is
+  // what gives the review screen its quarter-on-quarter deltas and the deck its trends.
+  const payload = {
+    run_id: perQuarter[perQuarter.length - 1].run_id,
+    quarter: QUARTERS[QUARTERS.length - 1],
+    mode: 'fixture',
+    model: null,
+    extractor: 'offline',
+    generated_at: new Date().toISOString(),
+    records: perQuarter.flatMap((p) => p.records)
+  };
+  await writeFile(recordsPath, `${JSON.stringify(payload, null, 2)}\n`, 'utf8');
+
   const checks = payload.records.reduce(
     (acc, r) => {
       const v = r.verification || {};
@@ -86,7 +107,7 @@ async function main() {
     },
     { checked: 0, verified: 0, failed: 0 }
   );
-  say(`  ${payload.records.length} records written`);
+  say(`  ${payload.records.length} records across ${QUARTERS.length} quarters (${QUARTERS.join(', ')})`);
   say(`  ${checks.verified} of ${checks.checked} quotes verified against the filing they came from, ${checks.failed} rejected`);
   say(`  ${DIM}Every record is review status "pending". Extraction produces candidates, never accepted records.${OFF}`);
 
@@ -108,14 +129,15 @@ async function main() {
   say('  it as trustworthy, because nobody has looked at it yet.');
   say('');
   say(`${BOLD}Everything is in ${OUT_DIR.replace(`${REPO_ROOT}/`, '')}/${OFF}`);
-  say('  records.json              the run output, all pending review');
-  say('  tyre-sector-DRAFT.pptx    every company marked with an asterisk — unreviewed');
+  say(`  records.json              both quarters, all pending review`);
+  say('  tyre-sector-DRAFT.pptx    every company starred — unreviewed — plus trend slides');
   say('  report.md is in the run directory printed above');
   say('');
   say(`${BOLD}To finish it properly${OFF}`);
   say('  1. npm run serve:dashboard        and open the printed URL');
   say(`  2. Records -> Restore / import JSON -> ${recordsPath.replace(`${REPO_ROOT}/`, '')}`);
   say('  3. Review tab — every figure sits next to the quote behind it. Approve or reject each.');
+  say('     Records tab shows quarter-on-quarter movement now that there are two quarters.');
   say('  4. Export the workbook and the deck. Both default to approved records only.');
   say(`  5. ${DIM}npm run archive -- --records=<your export>${OFF}  to keep the quarter.`);
   say('');

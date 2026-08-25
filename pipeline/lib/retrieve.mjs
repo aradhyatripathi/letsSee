@@ -73,7 +73,7 @@ export async function retrieveFiling(company, options = {}) {
 
   let plan;
   try {
-    plan = planStrategies(company, { mode, file, firecrawlKey });
+    plan = planStrategies(company, { mode, file, firecrawlKey, quarter });
   } catch (err) {
     result.error = err.message;
     return result;
@@ -108,7 +108,7 @@ export async function retrieveFiling(company, options = {}) {
   }
 
   if (!result.ok) {
-    result.error = summariseFailure(company, result.attempts, mode);
+    result.error = summariseFailure(company, result.attempts, mode, quarter);
     return result;
   }
 
@@ -126,7 +126,7 @@ export async function retrieveFiling(company, options = {}) {
 
 /* ---------------------------------------------------------------- planning -- */
 
-function planStrategies(company, { mode, file, firecrawlKey }) {
+function planStrategies(company, { mode, file, firecrawlKey, quarter }) {
   if (mode !== 'fixture' && mode !== 'live') {
     throw new Error(`unknown retrieval mode '${mode}' (expected 'fixture' or 'live')`);
   }
@@ -135,7 +135,7 @@ function planStrategies(company, { mode, file, firecrawlKey }) {
   if (file) plan.push({ strategy: 'file', target: resolve(file), file: resolve(file) });
 
   if (mode === 'fixture') {
-    plan.push({ strategy: 'fixture', target: fixturePath(company.id) });
+    plan.push({ strategy: 'fixture', target: fixturePath(company.id, quarter) });
     return plan;
   }
 
@@ -164,11 +164,11 @@ function runStrategy(step, ctx) {
   }
 }
 
-function summariseFailure(company, attempts, mode) {
+function summariseFailure(company, attempts, mode, quarter) {
   const detail = attempts.map((a) => `${a.strategy} (${a.target}): ${a.error}`).join('; ');
   const hint = mode === 'live'
     ? ' — download the filing by hand and re-run with a --file path for this company'
-    : ` — expected a fixture at ${fixturePath(company.id)}`;
+    : ` — expected a fixture at ${fixturePath(company.id, quarter)}`;
   return `${company.name}: every retrieval strategy failed. ${detail}${hint}`;
 }
 
@@ -178,7 +178,11 @@ async function fromFixture(path) {
   const buf = await readFile(path);
   const text = buf.toString('utf8');
   if (!text.trim()) throw new Error(`fixture ${path} is empty`);
-  return { text, bytes: buf.length, source: `fixture:${path.split(/[\\/]/).pop()}` };
+  // Quarter and file, not just the file: two quarters of the same company are both
+  // `ceat.txt`, and a record whose source cannot say which one it came from is not
+  // traceable.
+  const parts = path.split(/[\\/]/).slice(-2);
+  return { text, bytes: buf.length, source: `fixture:${parts.join('/')}` };
 }
 
 async function fromFile(path) {
