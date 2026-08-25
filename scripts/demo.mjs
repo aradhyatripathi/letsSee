@@ -55,7 +55,7 @@ function run(args, { quiet = true } = {}) {
 }
 
 async function main() {
-  const TOTAL = 4;
+  const TOTAL = 5;
   say(`${BOLD}Tyre intelligence pipeline — offline demo${OFF}`);
   say(`${DIM}No API key, no network. The filings are synthetic and say so on their first line.${OFF}`);
   say(`${DIM}${COMPANIES.length} companies in the roster: ${COMPANIES.map((c) => c.name).join(', ')}${OFF}`);
@@ -116,7 +116,13 @@ async function main() {
   const deck = await run(['pipeline/deck.mjs', `--records=${recordsPath}`, `--out=${deckPath}`, '--include-pending']);
   say(deck.out.split('\n').filter(Boolean).map((l) => `  ${l.trim()}`).join('\n'));
 
-  step(4, TOTAL, 'Try to archive it — and watch it refuse');
+  step(4, TOTAL, 'Build the workbook — the spec\u2019s primary output, and it needs no network');
+  const wbPath = join(OUT_DIR, 'tyre-workbook-DRAFT.xlsx');
+  const workbook = await run(['pipeline/workbook.mjs', `--records=${recordsPath}`, `--out=${wbPath}`, '--include-pending']);
+  say(workbook.out.split('\n').filter(Boolean).map((l) => `  ${l.trim()}`).join('\n'));
+  say(`  ${DIM}Four sheets, and every figure's cell carries the quote behind it as a comment.${OFF}`);
+
+  step(5, TOTAL, 'Try to archive it — and watch it refuse');
   const archive = await run(['pipeline/archive.mjs', `--records=${recordsPath}`, `--dir=${join(OUT_DIR, 'archive')}`]);
   const refused = archive.out.split('\n').filter((l) => /not archived|Only approved/.test(l));
   for (const line of refused.slice(0, 2)) say(`  ${line.trim()}`);
@@ -125,12 +131,14 @@ async function main() {
   say('');
   say(`${BOLD}What just happened${OFF}`);
   say('  A person ran one command. It retrieved, extracted, checked every figure against a');
-  say('  quote from its own filing, and produced a deck — and then refused to treat any of');
-  say('  it as trustworthy, because nobody has looked at it yet.');
+  say('  quote from its own filing, and produced both output artefacts — with no network and');
+  say('  no API key — and then refused to treat any of it as trustworthy, because nobody has');
+  say('  looked at it yet.');
   say('');
   say(`${BOLD}Everything is in ${OUT_DIR.replace(`${REPO_ROOT}/`, '')}/${OFF}`);
   say(`  records.json              both quarters, all pending review`);
   say('  tyre-sector-DRAFT.pptx    every company starred — unreviewed — plus trend slides');
+  say('  tyre-workbook-DRAFT.xlsx  four sheets, every row marked NOT REVIEWED');
   say('  report.md is in the run directory printed above');
   say('');
   say(`${BOLD}To finish it properly${OFF}`);

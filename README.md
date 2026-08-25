@@ -85,10 +85,10 @@ are on disk, Q4 FY25 and Q1 FY26. Where a company's Q1 FY26 filing carries compa
 columns, the Q4 FY25 fixture restates that column exactly, so the two agree about the same
 quarter the way successive real filings do.
 
-And the dashboard loads SheetJS, Chart.js and pdf.js from a CDN, so with no connection the
-Excel export stays disabled and charts do not render. Review, compare, import, the deck
-export and the delta views work regardless — the deck writer is hand-rolled precisely so
-it needs nothing.
+And the dashboard loads Chart.js and pdf.js from a CDN, so with no connection the charts do
+not render and a PDF cannot be read in the browser. **Both output artefacts work
+regardless** — the workbook and the deck are written by this project rather than by a
+library, precisely so the things it exists to produce do not depend on a network.
 
 ## Working without an API key
 
@@ -161,6 +161,17 @@ circulates further than a workbook does.
 | `--quarter="Q1 FY26"` | Which quarter to compare. Default: the latest in the file. |
 | `--include-pending` | Include unreviewed records, marked `*` on every slide they appear on. |
 
+### `node pipeline/workbook.mjs` (`npm run workbook -- [options]`)
+
+Builds the four-sheet workbook from a records file. Approved-only by default; every row
+carries its review state either way.
+
+| Flag | Meaning |
+| --- | --- |
+| `--records=<path>` | Records JSON: a run output, a dashboard export, or a bare array. Required. |
+| `--out=<path>` | Where to write the `.xlsx`. Default: alongside `--records`. |
+| `--include-pending` | Include unreviewed records. Every row still says `NOT REVIEWED`. |
+
 ### `node pipeline/archive.mjs` (`npm run archive -- [options]`)
 
 | Flag | Meaning |
@@ -175,7 +186,7 @@ circulates further than a workbook does.
 
 | Command | What it does |
 | --- | --- |
-| `npm run demo` | The whole pipeline offline, ending in the archive refusing unreviewed records. |
+| `npm run demo` | The whole pipeline offline — both artefacts — ending in the archive refusing unreviewed records. |
 | `npm test` | Node's built-in test runner over `test/`. Offline. |
 | `npm run serve:dashboard` | Static server for `dashboard/`. `--port=N` to move off 8080; `--dir=<path>` must stay inside the repo. |
 | `npm run sync:core` | Re-inlines the shared source blocks into the dashboard. |
@@ -224,8 +235,8 @@ and the retrieved text stays in `runs/`.
 
 ## The workbook
 
-**Export Excel workbook** in the dashboard generates four sheets from whatever records
-are in storage (approved-only by default).
+**Export Excel workbook** in the dashboard, or `npm run workbook`. Four sheets from
+whatever records are in storage, approved-only by default.
 
 | Sheet | Contents |
 | --- | --- |
@@ -233,6 +244,12 @@ are in storage (approved-only by default).
 | **Segments** | Channel split (replacement / OEM / export) and product categories (TBR, TBB, PCR, 2W, OHT). |
 | **Outlook** | Paraphrased commentary, raw-material trend and capex per company. |
 | **Sources & Quotes** | Every figure with its exact source quote, review state, verification status, and the source it came from. |
+
+The file is written directly — a `.xlsx` is a ZIP of XML, the same as the deck — so it
+needs no library and no network. It used to come from a CDN, which made the spec's primary
+deliverable the one thing that failed on a machine behind a corporate proxy. Writing it
+here also recovers the styled headers and wrapped text the community build of SheetJS
+dropped.
 
 Traceability means something specific here. Each populated Core Financials cell carries a
 cell comment keyed `COMPANY|QUARTER|metric` — for example `Apollo Tyres|Q1 FY26|ebitda` —
@@ -307,6 +324,7 @@ forget.
 pipeline/
   run.mjs                  the manual trigger: retrieve -> extract -> verify -> write
   deck.mjs                 the sector deck, from a records file
+  workbook.mjs             the four-sheet workbook, from a records file
   archive.mjs              the cross-quarter archive of reviewed records
   config/companies.mjs     the roster and each company's ordered sources
   fixtures/<quarter>/      synthetic filings, one per company per quarter, offline runs
@@ -315,7 +333,8 @@ pipeline/
                            verification, prompts, workbook and deck models. Plain
                            script, inlined verbatim into the dashboard.
     deck-source.js         the PowerPoint renderer, inlined the same way
-    core.mjs / deck.mjs    load those two for Node
+    xlsx-source.js         the Excel renderer; uses the deck block's ZIP container
+    core.mjs / deck.mjs / xlsx.mjs   load those three for Node
     retrieve.mjs           Stage 1 — manual file, Firecrawl, direct fetch, fixture
     pdf.mjs                dependency-free PDF text extraction
     extract.mjs            Stage 2 — Claude, the offline extractor, and the carried answer
@@ -334,7 +353,9 @@ docs/                      BUILD_SPEC, ARCHITECTURE, WEEK_NOTE, SCOPE_OPTIONS, E
 
 `core-source.js` is the single source of truth. If a stage seems to need its own copy of
 the schema, a transform, or a prompt, import `TyreCore` instead — `npm test` fails if the
-dashboard's inlined copies drift from the files.
+dashboard's inlined copies drift from the files. The three blocks load in order: the core
+is data, the deck block owns the ZIP container both output formats are built on, and the
+xlsx block uses it.
 
 ## What this is not
 

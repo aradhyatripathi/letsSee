@@ -5,7 +5,6 @@
 <title>Company financial dashboard</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500&display=swap');
 
@@ -371,7 +370,7 @@
         <button type="button" class="btn btn-ghost" id="restore-json-btn">Restore / import JSON</button>
         <input type="file" id="restore-json-input" accept="application/json" style="display:none;">
       </div>
-      <p class="sub" style="margin-top:-8px;">The Excel export is a four-sheet workbook — Core Financials, Segments, Outlook, Sources &amp; Quotes — and every populated Core Financials cell carries a comment with the source quote behind it, so a number can be checked without leaving the file. "Approved records only" is on by default: an export is reviewed data unless you deliberately say otherwise. The CSV above is unchanged (one flat sheet, all records, normalized to ₹ crore). One honest caveat about formatting: this page loads the community build of SheetJS, whose writer ignores per-cell styling — column widths and the cell comments come through, but bold headers and wrapped text are dropped, and freeze panes may be too. The data and the traceability are unaffected, which is what the workbook is for.</p>
+      <p class="sub" style="margin-top:-8px;">The Excel export is a four-sheet workbook — Core Financials, Segments, Outlook, Sources &amp; Quotes — and every populated Core Financials cell carries a comment with the source quote behind it, so a number can be checked without leaving the file. "Approved records only" is on by default: an export is reviewed data unless you deliberately say otherwise. The CSV above is unchanged (one flat sheet, all records, normalized to ₹ crore). The workbook is written by this page directly — a .xlsx is a ZIP of XML, the same as the deck — so it needs no library and works with no network at all. That matters: it used to come from a CDN, which made the primary deliverable the one thing that failed on a machine behind a corporate proxy. Writing it here also recovers the styled headers and wrapped text that the community build of SheetJS dropped, and every row carries its review state.</p>
       <p class="sub" style="margin-top:-8px;">The PowerPoint export is the same data as a deck: a title and provenance slide, one comparison slide per metric group, channel and product mix, outlook themes, a slide per company, and a closing slide saying plainly what quote verification does <i>not</i> catch. It obeys the same "Approved records only" tick, and a company nobody has reviewed is marked with an asterisk on every slide it appears on. Rejected records are never included, with the box ticked or not. The file is built here in the browser with no library — <span style="font-family:'IBM Plex Mono',monospace;">node pipeline/deck.mjs</span> renders the identical slides from the identical code.</p>
       <p class="sub" style="margin-top:-8px;">"Restore / import JSON" takes either a backup from this dashboard or a <span style="font-family:'IBM Plex Mono',monospace;">records.json</span> written by the Node pipeline (and a bare array of records). Each record is validated on the way in, anything malformed is listed rather than silently dropped, and imported records arrive <b>pending</b>. An imported file can never approve anything: a decision this browser already made about those exact figures is kept, a rejection in the file is honoured (a refusal is the safe answer and needs no proof), and everything else arrives pending however the file describes it. The cost is worth stating plainly — restoring a backup into an empty dashboard brings the data back pending, and the reviews have to be made again. A backup restores what was extracted, not what was decided. A record that does not state its currency is refused outright rather than being stamped INR/Crore, because that is the unit of every figure in it.</p>
       <div class="card" id="import-report" style="display:none;background:var(--paper);"></div>
@@ -1379,7 +1378,7 @@ function parseModelJSON(text) {
 /* --------------------------------------------------------------- workbook -- */
 
 // Builds a renderer-agnostic model of the four-sheet workbook. The dashboard
-// feeds this to SheetJS; tests assert on it directly without a spreadsheet.
+// feeds this to TyreXlsx; tests assert on it directly without opening a spreadsheet.
 // Every populated Core Financials cell carries a comment pointing at its
 // COMPANY|metric row in "Sources & Quotes", so a reader can verify any number
 // without leaving the workbook.
@@ -2571,9 +2570,331 @@ if (typeof globalThis !== 'undefined') { globalThis.TyreDeck = TyreDeck; }
 })();
 </script>
 
+<!--
+  The Excel writer, inlined the same way. It must come after the deck block, which owns
+  the ZIP container — a .xlsx and a .pptx are the same kind of package. Edit
+  pipeline/lib/xlsx-source.js and re-run `npm run sync:core`.
+-->
+<script>
+(function () {
+/* ==== TYRE-XLSX:BEGIN ====
+ * Excel rendering for the workbook model that TyreCore.buildWorkbookModel produces.
+ * Inlined verbatim into dashboard/tyre_comparison_dashboard.html between the TYRE-XLSX
+ * markers and loaded by pipeline/lib/xlsx.mjs, the same way the core and the deck are.
+ * `npm run sync:core` copies it; `npm test` fails if the copies drift.
+ *
+ * Plain script — no imports, no exports, no top-level await. Everything hangs off the
+ * TyreXlsx object defined at the bottom. It must be loaded AFTER the deck block, because
+ * it uses that block's ZIP writer: a .xlsx and a .pptx are the same kind of package and
+ * there is no reason to have two copies of the container code.
+ *
+ * Why write this at all, when the dashboard already loaded SheetJS. Two reasons, and the
+ * first is the serious one.
+ *
+ * The workbook is the build spec's primary output artefact (Section 5), and it was the one
+ * output that did not work without a network — SheetJS came from a CDN, so on a machine
+ * behind a corporate proxy the Export button disabled itself and the main deliverable
+ * simply was not there. Everything else in this project runs with nothing installed and
+ * nothing reachable; the deliverable it exists to produce should too.
+ *
+ * The second is that the community build of SheetJS ignores per-cell styling, so the
+ * styled headers Section 5 asks for never survived the round trip. Here they do.
+ */
+
+/* ------------------------------------------------------------------ util -- */
+
+function xlEsc(value) {
+  var sanitize = (typeof TyreCore !== 'undefined' && TyreCore && TyreCore.sanitizeText)
+    || (typeof window !== 'undefined' && window.TyreCore && window.TyreCore.sanitizeText)
+    || function (v) { return String(v == null ? '' : v); };
+  return String(sanitize(value))
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&apos;');
+}
+
+/** 0 -> A, 25 -> Z, 26 -> AA. */
+function xlColName(index) {
+  var s = '';
+  var n = index + 1;
+  while (n > 0) { var m = (n - 1) % 26; s = String.fromCharCode(65 + m) + s; n = Math.floor((n - 1) / 26); }
+  return s;
+}
+
+function xlParseRef(ref) {
+  var m = /^([A-Z]+)(\d+)$/.exec(String(ref || ''));
+  if (!m) return null;
+  var col = 0;
+  for (var i = 0; i < m[1].length; i++) col = col * 26 + (m[1].charCodeAt(i) - 64);
+  return { col: col - 1, row: Number(m[2]) - 1 };
+}
+
+// Excel rejects these characters in a sheet name and truncates past 31.
+function xlSheetName(name, index) {
+  var s = String(name == null ? '' : name).replace(/[\[\]:*?\/\\]/g, ' ').trim();
+  if (!s) s = 'Sheet' + (index + 1);
+  return s.length > 31 ? s.slice(0, 31) : s;
+}
+
+var XL_DECL = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n';
+var XL_NS = 'xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" ' +
+  'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"';
+
+var XL_THEME = { headerFill: '1F3A5F', headerText: 'FFFFFF', muted: '6B7280', rule: 'D8D5CC' };
+
+var XL_STYLE = { DEFAULT: 0, HEADER: 1, WRAP: 2, CELL: 3 };
+
+/* ----------------------------------------------------------------- parts -- */
+
+function xlStyles() {
+  return XL_DECL +
+    '<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' +
+    '<fonts count="3">' +
+      '<font><sz val="11"/><color theme="1"/><name val="Calibri"/></font>' +
+      '<font><b/><sz val="11"/><color rgb="FF' + XL_THEME.headerText + '"/><name val="Calibri"/></font>' +
+      '<font><sz val="11"/><color rgb="FF' + XL_THEME.muted + '"/><name val="Calibri"/></font>' +
+    '</fonts>' +
+    '<fills count="3">' +
+      '<fill><patternFill patternType="none"/></fill>' +
+      '<fill><patternFill patternType="gray125"/></fill>' +
+      '<fill><patternFill patternType="solid"><fgColor rgb="FF' + XL_THEME.headerFill + '"/><bgColor indexed="64"/></patternFill></fill>' +
+    '</fills>' +
+    '<borders count="2">' +
+      '<border><left/><right/><top/><bottom/><diagonal/></border>' +
+      '<border><left/><right/><top/><bottom style="thin"><color rgb="FF' + XL_THEME.rule + '"/></bottom><diagonal/></border>' +
+    '</borders>' +
+    '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>' +
+    '<cellXfs count="4">' +
+      '<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>' +
+      '<xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1" applyAlignment="1">' +
+        '<alignment vertical="center" wrapText="1"/></xf>' +
+      '<xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1" applyAlignment="1">' +
+        '<alignment vertical="top" wrapText="1"/></xf>' +
+      '<xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1"/>' +
+    '</cellXfs>' +
+    '<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>' +
+    '</styleSheet>';
+}
+
+function xlSheet(sheet, hasComments) {
+  var aoa = sheet.aoa || [];
+  var wrapCols = {};
+  (sheet.wrap || []).forEach(function (c) { wrapCols[c] = true; });
+
+  var xml = XL_DECL + '<worksheet ' + XL_NS + '>';
+
+  var freeze = xlParseRef(sheet.freeze);
+  if (freeze && (freeze.col || freeze.row)) {
+    xml += '<sheetViews><sheetView workbookViewId="0">' +
+      '<pane' + (freeze.col ? ' xSplit="' + freeze.col + '"' : '') +
+      (freeze.row ? ' ySplit="' + freeze.row + '"' : '') +
+      ' topLeftCell="' + xlEsc(sheet.freeze) + '" activePane="bottomRight" state="frozen"/>' +
+      '</sheetView></sheetViews>';
+  }
+
+  if (sheet.widths && sheet.widths.length) {
+    xml += '<cols>';
+    sheet.widths.forEach(function (w, i) {
+      xml += '<col min="' + (i + 1) + '" max="' + (i + 1) + '" width="' + (Number(w) || 12) + '" customWidth="1"/>';
+    });
+    xml += '</cols>';
+  }
+
+  xml += '<sheetData>';
+  aoa.forEach(function (row, r) {
+    xml += '<row r="' + (r + 1) + '"' + (r === 0 ? ' ht="22" customHeight="1"' : '') + '>';
+    (row || []).forEach(function (value, c) {
+      var ref = xlColName(c) + (r + 1);
+      var style = r === 0 ? XL_STYLE.HEADER : (wrapCols[c] ? XL_STYLE.WRAP : XL_STYLE.CELL);
+      if (typeof value === 'number' && isFinite(value)) {
+        xml += '<c r="' + ref + '" s="' + style + '"><v>' + value + '</v></c>';
+        return;
+      }
+      var text = xlEsc(value);
+      if (!text) { xml += '<c r="' + ref + '" s="' + style + '"/>'; return; }
+      // Inline strings rather than a shared-string table: one part fewer, and no index to
+      // get wrong. The size cost is irrelevant at this scale.
+      xml += '<c r="' + ref + '" s="' + style + '" t="inlineStr"><is><t xml:space="preserve">' + text + '</t></is></c>';
+    });
+    xml += '</row>';
+  });
+  xml += '</sheetData>';
+
+  if (hasComments) xml += '<legacyDrawing r:id="rIdVml"/>';
+  return xml + '</worksheet>';
+}
+
+// A cell note in .xlsx is the old VML-backed kind: the text lives in one part and a shape
+// positioned on the cell in another, and a reader wants the pair. This is what carries the
+// source quote behind every figure, which is the whole point of the workbook.
+function xlComments(comments) {
+  var xml = XL_DECL + '<comments xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' +
+    '<authors><author>pipeline</author></authors><commentList>';
+  comments.forEach(function (c) {
+    xml += '<comment ref="' + xlEsc(c.addr) + '" authorId="0"><text><r>' +
+      '<rPr><sz val="9"/><rFont val="Calibri"/></rPr>' +
+      '<t xml:space="preserve">' + xlEsc(c.text) + '</t></r></text></comment>';
+  });
+  return xml + '</commentList></comments>';
+}
+
+function xlVml(comments) {
+  var shapes = '';
+  comments.forEach(function (c, i) {
+    var at = xlParseRef(c.addr) || { col: 0, row: 0 };
+    shapes +=
+      '<v:shape id="_x0000_s' + (1025 + i) + '" type="#_x0000_t202" style="position:absolute;' +
+      'margin-left:80pt;margin-top:2pt;width:280pt;height:90pt;z-index:' + (i + 1) + ';visibility:hidden" ' +
+      'fillcolor="#fbf6d6" strokecolor="#c9c3b3" o:insetmode="auto">' +
+      '<v:fill color2="#fbf6d6"/><v:shadow on="t" color="black" obscured="t"/>' +
+      '<v:path o:connecttype="none"/>' +
+      '<v:textbox style="mso-direction-alt:auto"><div style="text-align:left"></div></v:textbox>' +
+      '<x:ClientData ObjectType="Note"><x:MoveWithCells/><x:SizeWithCells/>' +
+      '<x:Anchor>' + (at.col + 1) + ', 15, ' + at.row + ', 2, ' + (at.col + 4) + ', 15, ' + (at.row + 5) + ', 2</x:Anchor>' +
+      '<x:AutoFill>False</x:AutoFill><x:Row>' + at.row + '</x:Row><x:Column>' + at.col + '</x:Column>' +
+      '</x:ClientData></v:shape>';
+  });
+  return '<xml xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office" ' +
+    'xmlns:x="urn:schemas-microsoft-com:office:excel">' +
+    '<o:shapelayout v:ext="edit"><o:idmap v:ext="edit" data="1"/></o:shapelayout>' +
+    '<v:shapetype id="_x0000_t202" coordsize="21600,21600" o:spt="202" path="m,l,21600r21600,l21600,xe">' +
+    '<v:stroke joinstyle="miter"/><v:path gradientshapeok="t" o:connecttype="rect"/></v:shapetype>' +
+    shapes + '</xml>';
+}
+
+function xlRels(items) {
+  var xml = XL_DECL + '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">';
+  items.forEach(function (it) {
+    xml += '<Relationship Id="' + it.id + '" Type="' + it.type + '" Target="' + it.target + '"/>';
+  });
+  return xml + '</Relationships>';
+}
+
+var XL_REL = {
+  officeDocument: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument',
+  worksheet: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet',
+  styles: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles',
+  comments: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/comments',
+  vml: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/vmlDrawing',
+  coreProps: 'http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties'
+};
+
+/* ------------------------------------------------------------------- api -- */
+
+/** The package parts for a workbook model, as [{ name, data }]. */
+function buildXlsxParts(model) {
+  var sheets = (model && model.sheets) || [];
+  if (!sheets.length) throw new Error('workbook model has no sheets');
+
+  var commentsBySheet = {};
+  ((model && model.comments) || []).forEach(function (c) {
+    (commentsBySheet[c.sheet] = commentsBySheet[c.sheet] || []).push(c);
+  });
+
+  var entries = [];
+  var types = XL_DECL + '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">' +
+    '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>' +
+    '<Default Extension="xml" ContentType="application/xml"/>' +
+    '<Default Extension="vml" ContentType="application/vnd.openxmlformats-officedocument.vmlDrawing"/>' +
+    '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>' +
+    '<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>' +
+    '<Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/>';
+
+  var sheetTags = '';
+  var workbookRels = [{ id: 'rIdStyles', type: XL_REL.styles, target: 'styles.xml' }];
+  var seenNames = {};
+
+  sheets.forEach(function (sheet, i) {
+    var n = i + 1;
+    var name = xlSheetName(sheet.name, i);
+    // Two sheets cannot share a name; a model that produced one would otherwise write a
+    // package Excel refuses to open.
+    if (seenNames[name.toLowerCase()]) name = xlSheetName(name.slice(0, 28) + ' ' + n, i);
+    seenNames[name.toLowerCase()] = true;
+
+    var comments = commentsBySheet[sheet.name] || [];
+    var hasComments = comments.length > 0;
+
+    entries.push({ name: 'xl/worksheets/sheet' + n + '.xml', data: xlSheet(sheet, hasComments) });
+    types += '<Override PartName="/xl/worksheets/sheet' + n + '.xml" ' +
+      'ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>';
+
+    if (hasComments) {
+      entries.push({ name: 'xl/comments' + n + '.xml', data: xlComments(comments) });
+      entries.push({ name: 'xl/drawings/vmlDrawing' + n + '.vml', data: xlVml(comments) });
+      entries.push({ name: 'xl/worksheets/_rels/sheet' + n + '.xml.rels', data: xlRels([
+        { id: 'rIdVml', type: XL_REL.vml, target: '../drawings/vmlDrawing' + n + '.vml' },
+        { id: 'rIdComments', type: XL_REL.comments, target: '../comments' + n + '.xml' }
+      ]) });
+      types += '<Override PartName="/xl/comments' + n + '.xml" ' +
+        'ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.comments+xml"/>';
+    }
+
+    sheetTags += '<sheet name="' + xlEsc(name) + '" sheetId="' + n + '" r:id="rIdSheet' + n + '"/>';
+    workbookRels.push({ id: 'rIdSheet' + n, type: XL_REL.worksheet, target: 'worksheets/sheet' + n + '.xml' });
+  });
+
+  entries.push({ name: '_rels/.rels', data: xlRels([
+    { id: 'rId1', type: XL_REL.officeDocument, target: 'xl/workbook.xml' },
+    { id: 'rId2', type: XL_REL.coreProps, target: 'docProps/core.xml' }
+  ]) });
+  entries.push({ name: 'docProps/core.xml', data: XL_DECL +
+    '<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" ' +
+    'xmlns:dc="http://purl.org/dc/elements/1.1/">' +
+    '<dc:title>Tyre sector — reviewed filing extracts</dc:title>' +
+    '<dc:subject>Every figure carries the quote it came from</dc:subject>' +
+    '</cp:coreProperties>' });
+  entries.push({ name: 'xl/workbook.xml', data: XL_DECL + '<workbook ' + XL_NS + '><sheets>' + sheetTags + '</sheets></workbook>' });
+  entries.push({ name: 'xl/_rels/workbook.xml.rels', data: xlRels(workbookRels) });
+  entries.push({ name: 'xl/styles.xml', data: xlStyles() });
+
+  // [Content_Types].xml must be the first entry in the package.
+  entries.unshift({ name: '[Content_Types].xml', data: types + '</Types>' });
+  return entries;
+}
+
+/**
+ * Render a workbook model to .xlsx bytes.
+ * @param {object} model  TyreCore.buildWorkbookModel output.
+ * @returns {Uint8Array}
+ */
+function writeXlsx(model) {
+  var deck = (typeof TyreDeck !== 'undefined' && TyreDeck) ||
+    (typeof window !== 'undefined' && window.TyreDeck) ||
+    (typeof globalThis !== 'undefined' && globalThis.TyreDeck) || null;
+  if (!deck || !deck.zip) {
+    throw new Error('TyreDeck.zip is not available — the deck block must load before this one');
+  }
+  return deck.zip(buildXlsxParts(model));
+}
+
+/** Convenience for callers that only hold records. */
+function recordsToXlsx(records, opts) {
+  var core = (typeof TyreCore !== 'undefined' && TyreCore) ||
+    (typeof window !== 'undefined' && window.TyreCore) ||
+    (typeof globalThis !== 'undefined' && globalThis.TyreCore) || null;
+  if (!core || !core.buildWorkbookModel) throw new Error('TyreCore.buildWorkbookModel is not available');
+  return writeXlsx(core.buildWorkbookModel(records, opts));
+}
+
+var TyreXlsx = {
+  writeXlsx: writeXlsx,
+  recordsToXlsx: recordsToXlsx,
+  buildXlsxParts: buildXlsxParts,
+  colName: xlColName,
+  sheetName: xlSheetName,
+  MIME: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+};
+
+if (typeof window !== 'undefined') { window.TyreXlsx = TyreXlsx; }
+if (typeof globalThis !== 'undefined') { globalThis.TyreXlsx = TyreXlsx; }
+/* ==== TYRE-XLSX:END ==== */
+})();
+</script>
+
 <script>
 const Core = window.TyreCore;
 const TyreDeck = window.TyreDeck;
+const TyreXlsx = window.TyreXlsx;
 const STORAGE_KEY = Core.STORAGE_KEY;
 let records = [];
 let editingId = null;
@@ -3579,54 +3900,45 @@ $('export-csv-btn').addEventListener('click', () => {
 // function only renders that model with SheetJS: sheets in order, column widths,
 // freeze panes, wrapped text, and every comment attached to its own cell so a
 // reader can check any Core Financials number without leaving the workbook.
-function renderWorkbook(model){
-  const wb = XLSX.utils.book_new();
-  const sheets = {};
-  model.sheets.forEach(sheet => {
-    const ws = XLSX.utils.aoa_to_sheet(sheet.aoa);
-    if (sheet.widths) ws['!cols'] = sheet.widths.map(w => ({ wch: w }));
-    if (sheet.freeze) ws['!freeze'] = sheet.freeze;
-    if (sheet.wrap && sheet.wrap.length){
-      for (let row = 0; row < sheet.aoa.length; row++){
-        sheet.wrap.forEach(col => {
-          const addr = XLSX.utils.encode_cell({ r: row, c: col });
-          if (ws[addr]) ws[addr].s = Object.assign({}, ws[addr].s, { alignment: { wrapText: true, vertical: 'top' } });
-        });
-      }
-    }
-    sheets[sheet.name] = ws;
-    XLSX.utils.book_append_sheet(wb, ws, sheet.name);
-  });
-  let attached = 0;
-  model.comments.forEach(comment => {
-    const ws = sheets[comment.sheet];
-    if (!ws || !ws[comment.addr]) return;
-    ws[comment.addr].c = [{ a: 'pipeline', t: comment.text }];
-    ws[comment.addr].c.hidden = true;
-    attached++;
-  });
-  return { wb, attached };
-}
+// The workbook is written here, by the same shared code `node pipeline/workbook.mjs`
+// uses. It used to go through SheetJS from a CDN, which made the build spec's primary
+// output artefact the one thing that did not work without a network — on a machine behind
+// a corporate proxy the button disabled itself and the main deliverable simply was not
+// there. A .xlsx is a ZIP of XML, the same as the deck, so it is written directly.
+//
+// A side effect worth having: the community build of SheetJS ignored per-cell styling, so
+// the styled headers the spec asks for never survived. They do now.
 $('export-excel-btn').addEventListener('click', () => {
-  if (!libReady('XLSX')){
-    toast('SheetJS did not load');
-    alert('The workbook needs SheetJS (xlsx), which did not load from its CDN in this browser session.\n\nExport CSV still works — it needs no library.');
+  const reviewedOnly = $('workbook-reviewed-only').checked;
+  let model;
+  try {
+    model = Core.buildWorkbookModel(records, { reviewedOnly });
+  } catch (err){
+    toast('Workbook export failed');
+    alert('The workbook could not be built from these records: ' + err.message);
     return;
   }
-  const reviewedOnly = $('workbook-reviewed-only').checked;
-  const model = Core.buildWorkbookModel(records, { reviewedOnly });
   if (!model.generated_for){
-    if (reviewedOnly && records.length){
-      alert('No approved records yet.\n\n' + records.length + ' record(s) are in storage, but none have been approved in Review. Approve what you have checked, or untick "Approved records only" to export unreviewed data deliberately.');
+    const rejected = records.filter(r => Core.isRejected(r)).length;
+    if (reviewedOnly && records.length > rejected){
+      alert('No approved records yet.\n\n' + (records.length - rejected) + ' record(s) are in storage, but none have been approved in Review. Approve what you have checked, or untick "Approved records only" to export unreviewed data deliberately.');
     } else {
       toast('No records to export');
     }
     return;
   }
-  const { wb, attached } = renderWorkbook(model);
-  XLSX.writeFile(wb, 'tyre_workbook' + (reviewedOnly ? '_approved' : '_all_records') + '.xlsx');
-  toast('Workbook exported — ' + model.generated_for + ' record(s), ' + attached + ' cell comments');
+  let bytes;
+  try {
+    bytes = TyreXlsx.writeXlsx(model);
+  } catch (err){
+    toast('Workbook export failed');
+    alert('The workbook could not be written: ' + err.message);
+    return;
+  }
+  downloadBlob(bytes, 'tyre_workbook' + (reviewedOnly ? '_approved' : '_all_records') + '.xlsx', TyreXlsx.MIME);
+  toast('Workbook exported — ' + model.generated_for + ' record(s), ' + model.comments.length + ' cell comments');
 });
+
 
 // ---- PowerPoint deck ----
 // TyreDeck is the same inlined renderer pipeline/deck.mjs loads, so the button and
@@ -3897,9 +4209,9 @@ function renderApiKeyStatus(){
   else el.textContent = 'No key set. Extraction and Ask will not run until you add one.';
   const libs = $('settings-libs');
   if (libs) libs.innerHTML = '<b>Libraries</b>Chart.js (charts): ' + (libReady('Chart') ? 'loaded' : 'NOT loaded')
-    + ' · SheetJS (workbook): ' + (libReady('XLSX') ? 'loaded' : 'NOT loaded')
-    + ' · pdf.js (PDF reading): ' + (libReady('pdfjsLib') ? 'loaded' : 'NOT loaded')
-    + '. All three come from a CDN; anything showing NOT loaded was blocked or is offline, and the feature that needs it says so rather than failing silently.';
+    + ' · pdf.js (reading a PDF in the browser): ' + (libReady('pdfjsLib') ? 'loaded' : 'NOT loaded')
+    + '. Both come from a CDN; either showing NOT loaded was blocked or is offline, and the feature that needs it says so rather than failing silently. '
+    + 'The Excel workbook and the PowerPoint deck need neither — they are written here, so the two output artefacts work with no network at all.';
 }
 $('api-key-save').addEventListener('click', () => {
   const v = $('api-key-input').value.trim();

@@ -40,8 +40,10 @@ drift within a week, and the drift would be silent — a workbook column that no
 matches what the extractor produces looks fine until someone reads it.
 
 So there is exactly one copy of each: `pipeline/lib/core-source.js` holds the contract,
-and `pipeline/lib/deck-source.js` holds the PowerPoint renderer that turns part of it into
-a file. Both are written as plain browser scripts — no imports, no exports, no top-level
+`pipeline/lib/deck-source.js` holds the PowerPoint renderer, and
+`pipeline/lib/xlsx-source.js` holds the Excel one. The three load in that order, because
+the deck block owns the ZIP container — a `.pptx` and a `.xlsx` are the same kind of
+package, and there is no reason to carry two copies of the container code. Both are written as plain browser scripts — no imports, no exports, no top-level
 await — with everything hanging off a `TyreCore` / `TyreDeck` object, bracketed by
 `/* ==== TYRE-CORE:BEGIN ==== */` and `TYRE-DECK` markers respectively.
 
@@ -197,11 +199,13 @@ Reading the same path in prose:
    either side — the package is a ZIP of XML, entries stored rather than deflated so the
    same writer works in a browser with no zlib.
 
-   One honest caveat on formatting: the dashboard loads the SheetJS community build,
-   whose writer ignores per-cell styling (`cell.s`). Column widths and cell comments
-   survive the round trip; bold headers and fills do not, and freeze panes are set but
-   unverified against the real library. The data and the
-   traceability are unaffected, which is what the workbook is actually for.
+   Both files are written by this project rather than by a library. That started with the
+   deck, where there was no choice — the dashboard has no build step and the pipeline no
+   dependencies — and then applied to the workbook for a better reason: it was the one
+   output that did not work without a network. SheetJS came from a CDN, so the build
+   spec's primary deliverable was the single thing that failed on a machine behind a
+   corporate proxy. Writing it here also recovered the styled headers the community build
+   silently dropped.
 
 ## Working without a key
 

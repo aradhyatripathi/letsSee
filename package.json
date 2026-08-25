@@ -15,7 +15,8 @@
     "test": "node --test test/*.test.mjs",
     "deck": "node pipeline/deck.mjs",
     "archive": "node pipeline/archive.mjs",
-    "demo": "node scripts/demo.mjs"
+    "demo": "node scripts/demo.mjs",
+    "workbook": "node pipeline/workbook.mjs"
   },
   "license": "MIT"
 }
