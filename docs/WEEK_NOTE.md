@@ -172,6 +172,60 @@ The pattern across all five is worth stating once. None of them surfaced from a 
 one was found by reading the code against a hostile case, and every one would have put a
 confident, plausible, wrong number in front of a reviewer.
 
+## A third review pass, and what it says about the first two
+
+Everything above was written after two passes of reading the code against hostile
+cases. A third pass — six reviewers, each told to demonstrate a defect by running it,
+each finding then handed to an independent skeptic told to refute it — found seventeen
+more. The pattern is worth recording, because it is the same one every time and it is
+not "we were careless".
+
+Every serious finding was a guarantee that was stated but not enforced.
+
+The quote gate did not fire when nothing was quoted. `verifyQuotes` counted a figure with
+no quote as `unquoted` and still returned ok, on the reasoning — written into a test, with
+a comment explaining it — that a missing quote is not a fabricated one and should be
+surfaced rather than fail the extraction. The reasoning sounds right and the hole it left
+was total: a record of twenty-one invented numbers with no quotes anywhere passed and was
+stored, and the run reported it as clean.
+
+A rejected record reached every output if its status was spelled `'Rejected'`. Each output
+compared the string at its own call site, so a file not written by this dashboard put a
+record a person had explicitly thrown out into the workbook, the deck and the model's
+context.
+
+An imported file could approve records. The rule vouched for an incoming approval when the
+same record was already present with identical content — which proves the figures match
+and nothing whatever about who decided.
+
+A crafted record id ran as code, because the record list built `onclick` handlers by
+concatenating it.
+
+The archive would accept a whole retrieved filing, because a document is trivially an
+exact substring of itself and nothing capped the size — the one thing boundary 2 exists
+to prevent, in the one component built to enforce it.
+
+And a caveat that only appeared on the last of three paginated slides, so a reader looking
+at the first saw a clean-looking ranking of figures in three currencies with no warning at
+all.
+
+Two things worth drawing out. First: not one of these came from a run failing. Every one
+was found by reading the code against a case nobody had tried, and every one would have
+put a confident, plausible, wrong number in front of a reviewer. A green suite is evidence
+that the cases someone thought of pass.
+
+Second, and less comfortable: several of these were introduced *by* the earlier careful
+passes. The `unquoted` hole was a deliberate decision with a comment justifying it. The
+content-vouching rule was written specifically to stop a file importing its own approvals,
+and it stopped the obvious version while leaving the real one open. Care applied at the
+wrong altitude produces confident wrong code, and the only thing that caught it was
+someone else's adversarial reading.
+
+The fixes are in and each has a regression test. Where a test guards a defect by pattern
+rather than behaviour, the guard itself was checked by reintroducing the defect and
+confirming the suite goes red — the first two guards written for this did not, which is
+the same lesson one level up.
+
 ## What was added afterwards, and why none of it crossed a line
 
 Three things the scoping note asks for turned out to be non-goals in the spec rather than

@@ -67,7 +67,9 @@ npm run serve:dashboard   # http://localhost:8080/tyre_comparison_dashboard.html
 ```
 
 In the dashboard: **Records → Restore / import JSON** → `demo-output/records.json` → the
-records land under storage key `tyre-records-v2` with `review.status: "pending"`. Go to
+records land under storage key `tyre-records-v2` with `review.status: "pending"`. An
+imported file can never approve anything — it can introduce a rejection, keep a decision
+this browser already made, and nothing else. Go to
 **Review**, read each figure next to its source quote, and approve or reject. Nothing is
 treated as trustworthy until you do; **Compare**, the workbook, the deck and Q&A all
 respect the approved-only filter.
@@ -206,11 +208,13 @@ What to expect, honestly:
 - **PDF text extraction is dependency-free and therefore imperfect.** Scanned filings
   have no text layer and exotic font encodings come out as mojibake; both surface as an
   actionable failure, not as garbage fed forward.
-- **Quote verification will reject some extractions.** Every non-empty quote must match
-  the retrieved text at 85% coverage within a window, word order counted, and the figure
-  must appear in its own quote. A failure re-extracts once, then reports the company as
-  failed with the offending quotes attached. That is the enforcement of "never fabricate
-  a quote" — a prompt instruction alone is not.
+- **Quote verification will reject some extractions.** Every quote must match the
+  retrieved text at 85% coverage within a window, word order counted, and the figure must
+  appear in its own quote. A figure reported with *no* quote fails too — the prompt's own
+  rule is that a figure you cannot quote is returned as null, so an unquoted figure is the
+  model breaking it. A failure re-extracts once, then reports the company as failed with
+  the offending quotes attached. That is the enforcement of "never fabricate a quote" — a
+  prompt instruction alone is not.
 - **Cost.** One extraction call per company (`max_tokens` 16000, adaptive thinking) plus
   one call per Q&A question (4000). Seven companies is seven calls; long filings dominate
   input tokens.
@@ -225,10 +229,10 @@ are in storage (approved-only by default).
 
 | Sheet | Contents |
 | --- | --- |
-| **Core Financials** | One row per company, one column per core metric. Nulls render as `—`, never `0` or blank. |
+| **Core Financials** | One row per company, one column per core metric, and a **Review** column saying who approved it or `NOT REVIEWED`. Nulls render as `—`, never `0` or blank. |
 | **Segments** | Channel split (replacement / OEM / export) and product categories (TBR, TBB, PCR, 2W, OHT). |
 | **Outlook** | Paraphrased commentary, raw-material trend and capex per company. |
-| **Sources & Quotes** | Every figure with its exact source quote, verification status, and the source it came from. |
+| **Sources & Quotes** | Every figure with its exact source quote, review state, verification status, and the source it came from. |
 
 Traceability means something specific here. Each populated Core Financials cell carries a
 cell comment keyed `COMPANY|QUARTER|metric` — for example `Apollo Tyres|Q1 FY26|ebitda` —
@@ -342,10 +346,12 @@ dashboard's inlined copies drift from the files.
   retry policy beyond one re-extraction. A run is allowed to fail and need a person to
   press the button again.
 - **Not a source of truth without the review pass.** Extraction produces candidates.
-  Quote verification catches a fabricated quote, a quote reassembled out of order, and a
-  figure that is not in the span quoted to support it. It cannot catch a figure quoted
-  faithfully from the wrong *table*. Records are `pending` until a human approves them,
-  and that gate is the safety property this whole design rests on.
+  Quote verification catches a fabricated quote, a quote reassembled out of order, a
+  figure that is not in the span quoted to support it, and a figure offered with no quote
+  at all. It cannot catch a figure quoted faithfully from the wrong *table*. Records are
+  `pending` until a human approves them, and that gate is the safety property this whole
+  design rests on — which is why no imported file can approve anything, and why restoring
+  a backup brings the data back pending and the reviews have to be made again.
 - **Not proven against a real filing.** Nothing here has been run against a live site or
   a live API. Every number in this repo came from a synthetic fixture. The routes above
   exist so that can be fixed without waiting for a key.

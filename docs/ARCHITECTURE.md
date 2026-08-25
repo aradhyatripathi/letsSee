@@ -157,8 +157,11 @@ Reading the same path in prose:
    read as the accounting convention for a loss, and period labels like `FY26` or `Q1`
    scrubbed first so they cannot stand in for the figure they label.
 
-   A value reported with no quote at all is recorded as `unquoted` rather than silently
-   accepted. A failure re-extracts once, naming the fields that failed, and then reports
+   A value reported with no quote at all is recorded as `unquoted`, and that fails the
+   record. It used to be recorded and allowed through, on the reasoning that a missing
+   quote is not a fabricated one — which left the gate open completely: a record of
+   twenty-one invented figures with no quotes anywhere passed and was stored. The prompt's
+   own rule is that a figure you cannot quote is returned as null. A failure re-extracts once, naming the fields that failed, and then reports
    that company as failed with the offending quotes attached, while the other eight carry
    on.
 
