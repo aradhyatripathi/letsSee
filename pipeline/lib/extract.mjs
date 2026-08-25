@@ -16,7 +16,14 @@
 import { callMessages, DEFAULT_MODEL } from './anthropic.mjs';
 import { TyreCore } from './core.mjs';
 
-const EXTRACTION_MAX_TOKENS = 8000;
+// Twenty-one figures each with an exact quote is a long answer, and a response
+// cut off at the limit is unrecoverable JSON rather than a partial record. The
+// budget is only spent if it is used, so it is set well clear of the need.
+const EXTRACTION_MAX_TOKENS = 16000;
+
+// Adaptive thinking. These filings put three or four comparative columns side by
+// side and the failure this whole design guards against is reading the wrong one.
+const EXTRACTION_THINKING = { type: 'adaptive' };
 const OFFLINE_EXTRACTOR = 'offline-regex';
 const MANUAL_EXTRACTOR = 'claude-manual';
 
@@ -33,7 +40,8 @@ const MANUAL_EXTRACTOR = 'claude-manual';
  * @param {string} [options.source]       Where the text came from; stored on the record.
  * @param {string} [options.apiKey]       Falls back to ANTHROPIC_API_KEY.
  * @param {string} [options.model]        Default claude-sonnet-4-6.
- * @param {number} [options.maxTokens]    Output budget, default 8000.
+ * @param {number} [options.maxTokens]    Output budget, default 16000.
+ * @param {object|null} [options.thinking] Adaptive thinking; null disables it.
  * @param {number} [options.retries]      Re-extractions after a quote-verification
  *                                        failure, default 1.
  * @param {string} [options.retrievedAt]  ISO timestamp of retrieval; defaults to now.
@@ -51,6 +59,7 @@ export async function extractRecord({
   apiKey = null,
   model = DEFAULT_MODEL,
   maxTokens = EXTRACTION_MAX_TOKENS,
+  thinking = EXTRACTION_THINKING,
   retries = 1,
   retrievedAt = null,
   timeoutMs = undefined,
@@ -94,6 +103,7 @@ export async function extractRecord({
         system: prompt.system,
         user: correction ? `${prompt.user}\n\n${correction}` : prompt.user,
         maxTokens,
+        thinking,
         timeoutMs,
         signal
       });

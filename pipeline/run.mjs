@@ -57,6 +57,10 @@ Working without an API key
   --response=<id>:<path>   Read a pasted JSON answer back in for one company and
                            verify its quotes against this run's retrieved text,
                            exactly as a live extraction would be. Repeatable.
+  --no-thinking            Extract without adaptive thinking. On by default: these
+                           filings put several comparative columns side by side and
+                           picking the wrong one is the failure this design guards
+                           against. Turn it off only if the API rejects it.
 
 Environment
   ANTHROPIC_API_KEY        Required for API extraction. Live mode refuses to start
@@ -79,7 +83,7 @@ Examples
 Exit code 0 when at least one record was produced, 1 when none were.
 `.trim();
 
-const BOOLEAN_FLAGS = new Set(['help', 'offline-extract', 'retrieve-only', 'emit-prompt']);
+const BOOLEAN_FLAGS = new Set(['help', 'offline-extract', 'retrieve-only', 'emit-prompt', 'no-thinking']);
 const VALUE_FLAGS = new Set(['companies', 'quarter', 'mode', 'model', 'file', 'response', 'out', 'concurrency']);
 
 /* -------------------------------------------------------------------- cli -- */
@@ -184,6 +188,7 @@ function resolveOptions(flags) {
     files,
     responses,
     stopAfter,
+    thinking: flags['no-thinking'] === true ? null : { type: 'adaptive' },
     apiKey,
     offlineExtract,
     offlineImplied,
@@ -325,7 +330,12 @@ async function processCompany(company, opts, runDir) {
   } else if (opts.offlineExtract) {
     extraction = await extractRecordOffline(args);
   } else {
-    extraction = await extractRecord({ ...args, apiKey: opts.apiKey, model: opts.model });
+    extraction = await extractRecord({
+      ...args,
+      apiKey: opts.apiKey,
+      model: opts.model,
+      thinking: opts.thinking
+    });
   }
 
   entry.extraction = {
@@ -504,7 +514,7 @@ async function main(argv) {
     const rest = opts.companies.filter((c) => !opts.responses.has(c.id)).length;
     log(`  extraction: pasted answers for ${carried}${rest ? `; ${rest} other${rest === 1 ? '' : 's'} ${opts.offlineExtract ? 'offline' : `via Claude API, ${opts.model}`}` : ''}`);
   } else {
-    log(`  extraction: ${opts.offlineExtract ? `offline deterministic extractor${opts.offlineImplied ? ' (no ANTHROPIC_API_KEY set)' : ''}` : `Claude API, ${opts.model}`}`);
+    log(`  extraction: ${opts.offlineExtract ? `offline deterministic extractor${opts.offlineImplied ? ' (no ANTHROPIC_API_KEY set)' : ''}` : `Claude API, ${opts.model}${opts.thinking ? ', adaptive thinking' : ', thinking off'}`}`);
   }
   if (opts.files.size) {
     log(`  manual uploads: ${[...opts.files.entries()].map(([id, path]) => `${id} → ${path}`).join(', ')}`);

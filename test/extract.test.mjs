@@ -163,8 +163,19 @@ test('a verbatim quote from the same model path is accepted', async (t) => {
 
   const body = stub.calls[0].body;
   assert.equal(body.model, DEFAULT_MODEL);
-  assert.equal(body.max_tokens, 8000, 'the spec raises the extraction budget from 1500');
-  assert.deepEqual(Object.keys(body).sort(), ['max_tokens', 'messages', 'model', 'system']);
+  assert.ok(
+    body.max_tokens >= 8000,
+    'the spec raises the extraction budget from 1500; 21 figures each with an exact quote is a long answer'
+  );
+  assert.deepEqual(body.thinking, { type: 'adaptive' }, 'extraction thinks — it has to pick the right comparative column');
+  assert.deepEqual(
+    Object.keys(body).sort(),
+    ['max_tokens', 'messages', 'model', 'system', 'thinking'],
+    'nothing else is sent'
+  );
+  for (const rejected of ['temperature', 'top_p', 'top_k']) {
+    assert.ok(!(rejected in body), `${rejected} is rejected outright by these models`);
+  }
   assert.deepEqual(body.messages.map((m) => m.role), ['user'], 'no assistant prefill');
 });
 

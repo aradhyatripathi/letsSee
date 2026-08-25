@@ -62,6 +62,7 @@ export function resolveApiKey(explicit) {
  * @param {string} options.user         Single user turn.
  * @param {number} [options.maxTokens]  Output budget. 8000 for extraction, 4000 for Q&A.
  * @param {number} [options.timeoutMs]  Per-attempt timeout, default 120000.
+ * @param {object} [options.thinking]   e.g. { type: 'adaptive' }; omitted when null.
  * @param {AbortSignal} [options.signal] Caller cancellation; aborts without retrying.
  * @returns {Promise<{ok:boolean, text:string, stop_reason:(string|null),
  *                    usage:(object|null), model:string, error:(string|null),
@@ -74,12 +75,14 @@ export async function callMessages({
   user,
   maxTokens = DEFAULT_MAX_TOKENS,
   timeoutMs = DEFAULT_TIMEOUT_MS,
+  thinking = null,
   signal = null
 } = {}) {
   const result = {
     ok: false,
     text: '',
     stop_reason: null,
+    stop_details: null,
     usage: null,
     model,
     error: null,
@@ -94,14 +97,21 @@ export async function callMessages({
     return result;
   }
 
-  // No temperature/top_p/top_k: newer models reject them. No assistant prefill:
-  // it returns 400 on these models, so JSON shape is held by the prompt alone.
-  const body = JSON.stringify({
+  // No temperature/top_p/top_k: current models reject them outright. No assistant
+  // prefill either — also a 400 — so the JSON shape is held by the prompt alone.
+  //
+  // `thinking` is passed through when the caller asks for it. Reading the right
+  // column out of a filing's comparative table is exactly the kind of work it
+  // helps with, so extraction turns it on; the response's thinking blocks are
+  // ignored below, which reads only text blocks.
+  const payloadBody = {
     model,
     max_tokens: maxTokens,
     system,
     messages: [{ role: 'user', content: user }]
-  });
+  };
+  if (thinking) payloadBody.thinking = thinking;
+  const body = JSON.stringify(payloadBody);
 
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     result.attempts = attempt;
@@ -153,9 +163,19 @@ export async function callMessages({
     result.stop_reason = payload.stop_reason ?? null;
     result.usage = payload.usage ?? null;
     result.model = payload.model || model;
+    // Populated only on a refusal; null for every other stop reason.
+    result.stop_details = payload.stop_details ?? null;
 
     if (result.stop_reason === 'refusal') {
-      result.error = 'the model declined this request (stop_reason "refusal") — its output must not be used';
+      const why = result.stop_details && result.stop_details.category
+        ? ` [${result.stop_details.category}]`
+        : '';
+      const explanation = result.stop_details && result.stop_details.explanation
+        ? ` — ${clip(result.stop_details.explanation, 200)}`
+        : '';
+      result.error =
+        `the model declined this request (stop_reason "refusal"${why})${explanation}. ` +
+        'Its output must not be used.';
       return result;
     }
 
