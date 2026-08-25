@@ -152,6 +152,11 @@
   .btn-approve{background:var(--good);color:#fff;}
   .btn-reject{background:transparent;color:var(--bad);border:1px solid var(--bad);}
   .rv-note{font-size:11px;color:var(--text-mute);margin-top:8px;}
+  .rv-outlook{margin-top:12px;border:1px solid var(--amber);border-radius:6px;overflow:hidden;}
+  .rv-outlook-head{background:var(--amber-light);color:var(--graphite);font-size:11px;font-weight:600;padding:8px 12px;}
+  .rv-outlook-row{display:grid;grid-template-columns:170px 1fr;gap:12px;padding:8px 12px;border-top:1px solid var(--line);font-size:12px;}
+  .rv-outlook-row .k{color:var(--text-mute);font-weight:600;}
+  .rv-outlook-row .v{color:var(--text);white-space:pre-wrap;word-break:break-word;}
 
   .chat{border:1px solid var(--line);border-radius:8px;background:var(--paper);padding:14px;height:400px;overflow-y:auto;margin-bottom:12px;}
   .msg{margin-bottom:15px;}
@@ -3138,6 +3143,30 @@ function statusBadge(r){
   return '<span class="badge ' + st + '">' + st + '</span>';
 }
 
+// The outlook fields are the only part of a record with no verification of any kind
+// behind them. They are paraphrased free text lifted out of a document fetched from a
+// third-party website, they appear on the deck a manager reads and in the model's Q&A
+// context, and until now the review screen did not show them — so approving a record
+// meant vouching for text nobody had looked at. A quote check cannot help here; a person
+// reading it is the only control there is.
+function outlookForReview(r){
+  const o = r.outlook || {};
+  const fields = [
+    ['Management commentary', o.commentary],
+    ['Raw-material trend', o.rm_trend],
+    ['Capex', o.capex]
+  ].filter(([, v]) => v != null && String(v).trim() !== '');
+  if (!fields.length){
+    return '<div class="rv-note">No outlook commentary was extracted from this filing.</div>';
+  }
+  return '<div class="rv-outlook"><div class="rv-outlook-head">Outlook — paraphrased, and <b>not quote-checked</b>. '
+    + 'This text goes onto the deck and into Q&amp;A exactly as written here, so read it before approving.</div>'
+    + fields.map(([label, value]) =>
+        '<div class="rv-outlook-row"><span class="k">' + esc(label) + '</span><span class="v">' + esc(value) + '</span></div>'
+      ).join('')
+    + '</div>';
+}
+
 function renderReview(){
   const counts = reviewCounts();
   const tabCount = $('tab-review-count');
@@ -3210,6 +3239,7 @@ function renderReview(){
       + banners
       + (rows ? '<table class="rv-table"><thead><tr><th>Metric</th><th>Value as reported</th><th>Stored quote</th><th>Quote check</th><th></th></tr></thead><tbody>' + rows + '</tbody></table>'
               : '<div class="rv-note">This record carries no core figures — only segments or commentary.</div>')
+      + outlookForReview(r)
       + noteLine + whenLine
       + '<div class="rv-actions">'
       + '<input type="text" id="note-' + escAttr(r.id) + '" placeholder="optional note — why you approved or rejected">'

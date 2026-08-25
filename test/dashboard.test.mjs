@@ -98,3 +98,27 @@ test('the inlined shared blocks are present and are the only copies', () => {
   }
   assert.doesNotMatch(dashboardOnly(), /function verifyQuotes/, 'the dashboard must not carry its own verifier');
 });
+
+test('the review screen shows the outlook text, which nothing else verifies', () => {
+  // The outlook fields are paraphrased free text lifted out of a document fetched from a
+  // third-party website. No quote check touches them, they appear on the deck a manager
+  // reads and in the model's Q&A context, and the review screen did not show them — so
+  // approving a record meant vouching for text nobody had looked at.
+  const source = dashboardOnly();
+  assert.match(source, /function outlookForReview/, 'the helper exists');
+
+  // The call has to be looked for inside renderReview specifically. Searching the whole
+  // file for `outlookForReview(r)` matches the function's own definition line, so the
+  // first version of this assertion passed with the call deleted.
+  const renderAt = source.indexOf('function renderReview(){');
+  assert.ok(renderAt !== -1, 'renderReview exists');
+  const renderBody = source.slice(renderAt, source.indexOf('\n}', renderAt));
+  assert.match(renderBody, /\+\s*outlookForReview\(r\)/, 'the review card actually calls it');
+
+  const fn = source.slice(source.indexOf('function outlookForReview'), renderAt);
+  assert.match(fn, /not quote-checked/i, 'it says they are unverified');
+  assert.match(fn, /esc\(value\)/, 'and escapes them — a filing controls this text');
+  for (const field of ['commentary', 'rm_trend', 'capex']) {
+    assert.match(fn, new RegExp(`o\\.${field}`), `${field} is shown`);
+  }
+});
