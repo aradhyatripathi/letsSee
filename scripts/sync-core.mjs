@@ -17,9 +17,11 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const DASH_PATH = join(root, 'dashboard/tyre_comparison_dashboard.html');
 
 /** Every block kept in sync, in the order the dashboard loads them. */
+// Order matters: the deck block owns the ZIP container, and the xlsx block uses it.
 export const BLOCKS = [
   { name: 'core', source: join(root, 'pipeline/lib/core-source.js'), marker: 'TYRE-CORE' },
-  { name: 'deck', source: join(root, 'pipeline/lib/deck-source.js'), marker: 'TYRE-DECK' }
+  { name: 'deck', source: join(root, 'pipeline/lib/deck-source.js'), marker: 'TYRE-DECK' },
+  { name: 'xlsx', source: join(root, 'pipeline/lib/xlsx-source.js'), marker: 'TYRE-XLSX' }
 ];
 
 function markers(marker) {

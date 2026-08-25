@@ -818,7 +818,7 @@ function parseModelJSON(text) {
 /* --------------------------------------------------------------- workbook -- */
 
 // Builds a renderer-agnostic model of the four-sheet workbook. The dashboard
-// feeds this to SheetJS; tests assert on it directly without a spreadsheet.
+// feeds this to TyreXlsx; tests assert on it directly without opening a spreadsheet.
 // Every populated Core Financials cell carries a comment pointing at its
 // COMPANY|metric row in "Sources & Quotes", so a reader can verify any number
 // without leaving the workbook.
