@@ -160,8 +160,19 @@ test('a manual upload is tried before anything else, and is read as text', async
 
     assert.equal(result.ok, true, result.error || '');
     assert.equal(result.strategy, 'file');
-    assert.equal(result.source, `file:${path}`);
     assert.equal(result.text, body);
+
+    // The filename, not the path. `source` is stored on every record and travels: onto
+    // the review card, into the deck footnote, into the workbook's Source column, into
+    // the committed archive, and into every Q&A payload sent to Anthropic. An absolute
+    // path carries the operator's username and their directory layout, none of which is
+    // about the filing, all of which then leaves with a deck sent outside the team.
+    assert.equal(result.source, 'file:goodyear-q1fy26.txt');
+    assert.ok(!result.source.includes(dir), 'the local path is not in what the record stores');
+
+    // It is not lost — the run knows exactly which file on this machine it read.
+    // runs/ is gitignored working space; that is the same split boundary 2 draws.
+    assert.equal(result.local_path, path);
   });
 });
 

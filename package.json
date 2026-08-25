@@ -17,7 +17,8 @@
     "archive": "node pipeline/archive.mjs",
     "demo": "node scripts/demo.mjs",
     "workbook": "node pipeline/workbook.mjs",
-    "test:browser": "node --test test/browser.test.mjs"
+    "test:browser": "node --test test/browser.test.mjs",
+    "pin:cdn": "node scripts/pin-cdn.mjs"
   },
   "license": "MIT"
 }
