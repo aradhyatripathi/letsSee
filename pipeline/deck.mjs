@@ -20,6 +20,7 @@ import { dirname, resolve, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { TyreCore } from './lib/core.mjs';
+import { expandHome } from './lib/userpath.mjs';
 import { approvalSourceNote } from './lib/report.mjs';
 import { TyreDeck } from './lib/deck.mjs';
 
@@ -66,12 +67,6 @@ function parseArgs(argv) {
     flags[name] = value;
   }
   return flags;
-}
-
-function expandHome(path) {
-  if (path === '~') return process.env.HOME || path;
-  if (path.startsWith('~/') && process.env.HOME) return join(process.env.HOME, path.slice(2));
-  return path;
 }
 
 /** Accept a run payload, a dashboard export, or a bare array. */

@@ -27,6 +27,7 @@ import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { TyreCore } from './lib/core.mjs';
+import { resolveUserPath } from './lib/userpath.mjs';
 import { approvalSourceNote } from './lib/report.mjs';
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -423,7 +424,7 @@ async function main(argv) {
     return 0;
   }
 
-  const dir = flags.dir ? resolve(process.cwd(), flags.dir) : DEFAULT_DIR;
+  const dir = flags.dir ? resolveUserPath(flags.dir) : DEFAULT_DIR;
 
   // --records with --list or --export used to be silently discarded, and the --list form
   // exited 0, so an operator could believe a record had been archived when nothing had.
@@ -466,7 +467,7 @@ async function main(argv) {
     if (problems.length) {
       process.stderr.write(`Note: ${problems.length} file(s) in ${dir} were skipped because they are not approved records. Run --list for the detail.\n`);
     }
-    const out = resolve(process.cwd(), flags.export);
+    const out = resolveUserPath(flags.export);
     await mkdir(dirname(out), { recursive: true });
     await writeFile(out, `${JSON.stringify({
       archive_version: 1,
@@ -481,7 +482,7 @@ async function main(argv) {
     return 0;
   }
 
-  const recordsPath = resolve(process.cwd(), flags.records);
+  const recordsPath = resolveUserPath(flags.records);
   let records;
   try {
     const payload = JSON.parse(await readFile(recordsPath, 'utf8'));

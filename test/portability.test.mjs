@@ -78,3 +78,43 @@ test('output paths are built with join or resolve, not string concatenation', ()
   }
   assert.deepEqual(offenders, [], 'use join() so the separator is right on every platform');
 });
+
+// `~` is not expanded by any shell inside a --flag=value argument, so the CLIs have
+// to do it themselves — and three of them did it by reading process.env.HOME, which
+// cmd.exe and PowerShell do not set. On Windows `--out=~/Desktop/deck.pptx` made a
+// folder literally called `~` wherever the user happened to be standing and wrote the
+// file into it, while the command printed a path that did not exist.
+test('home-directory expansion does not read a Unix-only variable', () => {
+  const offenders = [];
+  for (const path of sourceFiles()) {
+    if (path.includes('/test/')) continue;
+    const source = readFileSync(path, 'utf8');
+    for (const [i, line] of source.split('\n').entries()) {
+      if (line.trim().startsWith('//')) continue;
+      if (/process\.env\.HOME\b/.test(line)) {
+        offenders.push(`${path.replace(`${REPO_ROOT}/`, '')}:${i + 1}`);
+      }
+    }
+  }
+  assert.deepEqual(offenders, [], 'use os.homedir(), which is correct on every platform');
+});
+
+test('expandHome handles both separators and leaves everything else alone', async () => {
+  const { expandHome, resolveUserPath } = await import('../pipeline/lib/userpath.mjs');
+  const { homedir } = await import('node:os');
+  const home = homedir();
+
+  assert.equal(expandHome('~'), home);
+  assert.equal(expandHome('~/Desktop/deck.pptx'), join(home, 'Desktop/deck.pptx'));
+  // PowerShell users type backslashes; the same input should mean the same thing.
+  assert.equal(expandHome('~\\Desktop\\deck.pptx'), join(home, 'Desktop\\deck.pptx'));
+
+  // A tilde that is not a home reference is just a character in a name.
+  assert.equal(expandHome('report~draft.xlsx'), 'report~draft.xlsx');
+  assert.equal(expandHome('/tmp/x'), '/tmp/x');
+  assert.equal(expandHome(''), '');
+  assert.equal(expandHome(null), '');
+
+  // And a relative path resolves against where the command was run, not the repo.
+  assert.equal(resolveUserPath('out.xlsx', '/somewhere'), join('/somewhere', 'out.xlsx'));
+});

@@ -12,6 +12,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
+import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -21,18 +22,31 @@ const PAGE = join(REPO_ROOT, 'dashboard/tyre_comparison_dashboard.html');
 
 // Playwright is not a dependency of this repo. Look for it where a machine that has
 // it would keep it, and skip cleanly when it is nowhere.
+//
+// The module and the browser binary are installed separately, and a half-installed
+// Playwright — package present, `playwright install` never run — is a real state to
+// be in. Checking only the module meant the tests tried to launch a browser that was
+// not there, failed on every case, and then hung: the suite had to be killed after
+// ten minutes. So both halves are checked, and either one missing is a skip.
+const CHROMIUM_PATH = process.env.CHROMIUM_PATH || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome';
+
 async function loadChromium() {
+  let mod = null;
   for (const spec of ['playwright', '/opt/node22/lib/node_modules/playwright/index.mjs']) {
     try {
-      const mod = await import(spec);
-      return mod.chromium;
+      mod = await import(spec);
+      break;
     } catch { /* try the next one */ }
   }
-  return null;
+  if (!mod) return { chromium: null, why: 'Playwright is not installed' };
+  if (!existsSync(CHROMIUM_PATH)) {
+    return { chromium: null, why: `Playwright is installed but its browser is not at ${CHROMIUM_PATH} — run \`npx playwright install chromium\`, or set CHROMIUM_PATH` };
+  }
+  return { chromium: mod.chromium, why: null };
 }
 
-const chromium = await loadChromium();
-const skip = chromium ? false : 'Playwright is not installed — run npm run test:browser on a machine that has it';
+const { chromium, why } = await loadChromium();
+const skip = chromium ? false : `${why} — run npm run test:browser on a machine that has it`;
 
 /** Serve the one page on an ephemeral port, so the tests never collide with a dev server. */
 async function serve() {
@@ -56,7 +70,7 @@ async function sharedBrowser() {
   if (!shared) {
     const site = await serve();
     const browser = await chromium.launch({
-      executablePath: process.env.CHROMIUM_PATH || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome',
+      executablePath: CHROMIUM_PATH,
       args: ['--no-sandbox']
     });
     shared = { site, browser };
