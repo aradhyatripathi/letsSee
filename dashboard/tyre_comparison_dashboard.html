@@ -1838,9 +1838,47 @@ function buildWorkbookModel(records, opts) {
     });
   });
 
+  // What this file is, before what it says.
+  //
+  // A workbook is the artefact that gets forwarded — out of the team, into an inbox,
+  // opened by someone who was not at the presentation and has no idea where it came
+  // from. It opens on whichever sheet is first, so that sheet answers the questions a
+  // stranger has: what am I looking at, has anyone checked it, and can I quote it.
+  //
+  // It leads with the sample-data warning when there is one. A record can be approved
+  // by a person and still be a sample, so the warning is not conditional on the review
+  // state — it is conditional on where the figures came from.
+  var fixtures = fixtureCount(rows);
+  var approvedCount = rows.filter(isApproved).length;
+  var aboutAoa = [['What this is', fixtures
+    ? SYNTHETIC_BANNER
+    : 'Figures extracted from company filings, each one carrying the sentence it came from.']];
+  if (fixtures) {
+    aboutAoa.push([
+      'What that means',
+      fixtures + ' of ' + rows.length + ' record' + (rows.length === 1 ? '' : 's') +
+      ' here came from synthetic sample filings written to exercise the pipeline. The company' +
+      ' names are real; the figures are invented and are not what these companies reported.' +
+      ' Nothing in this workbook should be quoted as a reported figure.'
+    ]);
+  }
+  aboutAoa.push(['Records', String(rows.length)]);
+  aboutAoa.push(['Reviewed and approved by a person', approvedCount + ' of ' + rows.length]);
+  aboutAoa.push([
+    'How to check a number',
+    'Every populated cell on Core Financials carries a comment holding the sentence from the' +
+    ' filing that figure came from. Sources & Quotes lists all of them with the source of each.'
+  ]);
+  aboutAoa.push([
+    'What is not checked',
+    'The Outlook sheet is free text taken from the filings. No quote check applies to it.'
+  ]);
+
   return {
     generated_for: rows.length,
+    fixtures: fixtures,
     sheets: [
+      { name: 'About this file', aoa: aboutAoa, widths: [34, 96], wrap: [1] },
       { name: 'Core Financials', aoa: coreAoa, widths: [22, 12, 22, 10, 10, 26].concat(CORE_METRICS.map(function () { return 16; })), freeze: 'G2' },
       { name: 'Segments',        aoa: segAoa,  widths: [22, 12].concat(CHANNEL_KEYS.concat(PRODUCT_KEYS).map(function () { return 16; })), freeze: 'C2' },
       { name: 'Outlook',         aoa: outAoa,  widths: [22, 12, 70, 40, 40], freeze: 'C2', wrap: [2, 3, 4] },
@@ -1854,6 +1892,34 @@ function buildWorkbookModel(records, opts) {
 
 
 /* -------------------------------------------------------------- deck model -- */
+
+// Is this record built from a synthetic sample filing rather than a real one?
+//
+// The fixtures announce themselves on their first line — "SYNTHETIC TEST DATA … Not a
+// real filing" — and that marker died at extraction. Everything downstream then looked
+// exactly like the real thing: a handsome table of revenue, EBITDA and PAT for seven
+// named, listed, publicly-scrutinised companies, with entirely invented figures and no
+// word anywhere saying so. `Source: fixture:q1-fy26/mrf.txt` in six-point type is not
+// a disclosure; "fixture" is not a word the reader knows.
+//
+// The risk is not that a demo fails. It is that it succeeds, somebody forwards the
+// deck, and a fabricated revenue for a real company circulates with an approver's name
+// against it.
+function isFixtureRecord(record) {
+  return /^fixture:/i.test(String((record && record.source) || ''));
+}
+
+function fixtureCount(records) {
+  var n = 0;
+  for (var i = 0; i < (records || []).length; i++) if (isFixtureRecord(records[i])) n++;
+  return n;
+}
+
+// The banner every output carries when any figure in it is invented. Deliberately
+// blunt, deliberately first, and deliberately not softened by the review state: a
+// record can be approved by a person and still be a sample.
+var SYNTHETIC_BANNER = 'ILLUSTRATIVE ONLY — figures are synthetic sample data, not reported results.';
+
 
 // Slide groupings. Between them these name all 21 core metrics exactly once,
 // which is asserted in the tests: a metric added to CORE_METRICS and forgotten
@@ -1922,6 +1988,7 @@ function buildDeckModel(records, opts) {
   var approved = rows.filter(isApproved);
   var pending = rows.filter(function (r) { return reviewStatus(r) === 'pending'; });
   var reviewers = uniqueStrings(approved.map(function (r) { return r.review && r.review.reviewer; }));
+  var fixtures = fixtureCount(rows);
 
   var tally = { verified: 0, not_found: 0, value_not_in_quote: 0, quote_too_long: 0, unquoted: 0, checked: 0 };
   rows.forEach(function (r) {
@@ -1950,6 +2017,7 @@ function buildDeckModel(records, opts) {
     approved: approved.length,
     pending: pending.length,
     rejected_withheld: rejected.length,
+    fixtures: fixtures,
     reviewers: reviewers,
     currencies: currencies,
     quarters: quarters,
@@ -1961,10 +2029,18 @@ function buildDeckModel(records, opts) {
   slides.push({
     kind: 'title',
     title: 'Indian tyre sector — ' + quarter,
-    subtitle: rows.length
+    subtitle: (fixtures ? 'SAMPLE DATA · ' : '') + (rows.length
       ? rows.length + ' compan' + (rows.length === 1 ? 'y' : 'ies') + (oneCurrency ? ' · figures in ' + oneCurrency : '')
-      : 'No records selected',
-    footnote: 'Generated from reviewed filing extracts. Every figure traces to a quote from the filing it came from.'
+      : 'No records selected'),
+    // Was unconditional, and said "Generated from reviewed filing extracts" over a
+    // deck in which nothing had been reviewed. The title slide is the one that sits on
+    // screen while somebody talks over it, so it states what is actually true of these
+    // records and leads with the sample warning when there is one.
+    footnote: (fixtures ? SYNTHETIC_BANNER + ' ' : '') +
+      (provenance.approved === provenance.total && provenance.total
+        ? 'Every figure traces to a quote from the filing it came from, and every record was marked approved by a reviewer.'
+        : 'Every figure traces to a quote from the filing it came from. ' +
+          provenance.pending + ' of ' + provenance.total + ' records have not been reviewed by a person.')
   });
 
   if (!rows.length) {
@@ -2160,7 +2236,9 @@ function buildDeckModel(records, opts) {
         : 'Every figure in this deck arrived with a quote.',
       'Figures are as reported by each company. Different companies close their books differently; this deck does not restate them onto a common basis.',
       'The outlook slides are the companies\' own words, summarised. Nothing verifies them: there is no quote check on free text, so read them as what a company said about itself, not as something this deck established.'
-    ]
+    ].concat(fixtures
+      ? [fixtures + ' of ' + provenance.total + ' record' + (provenance.total === 1 ? '' : 's') + ' in this deck came from synthetic sample filings written to exercise the pipeline. The company names are real; the figures are invented and are not what these companies reported. Nothing in this deck should be quoted as a reported figure.']
+      : [])
   });
 
   return {
