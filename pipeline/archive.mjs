@@ -23,13 +23,26 @@
 
 import { mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
+import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { TyreCore } from './lib/core.mjs';
 import { approvalSourceNote } from './lib/report.mjs';
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+
+// A path as the reader should see it: relative to the repo when it is inside it,
+// absolute when it is not.
+//
+// This used to be `path.replace(`${REPO_ROOT}/`, '')`, which is a string operation
+// pretending to be a path one. On Windows the separators do not match, so nothing is
+// stripped and the full path is printed instead — including the user's name and home
+// directory, on screen, in front of whoever they are demonstrating this to. The same
+// leak was fixed in what records store; this is the version that reaches the terminal.
+function shortPath(path) {
+  const rel = relative(REPO_ROOT, path);
+  return rel && !rel.startsWith('..') ? rel : path;
+}
 const DEFAULT_DIR = join(REPO_ROOT, 'archive');
 
 // A quote is a short span of a filing, and it belongs here — it is what makes a figure
@@ -435,7 +448,7 @@ async function main(argv) {
     if (problems.length) {
       process.stdout.write(`\n  ${problems.length} file${problems.length === 1 ? '' : 's'} in this directory ${problems.length === 1 ? 'is' : 'are'} not an approved record and ${problems.length === 1 ? 'was' : 'were'} not counted:\n`);
       for (const p of problems) {
-        process.stdout.write(`    ! ${p.path.replace(`${REPO_ROOT}/`, '')} — ${p.reason}\n`);
+        process.stdout.write(`    ! ${shortPath(p.path)} — ${p.reason}\n`);
       }
     }
     return problems.length && !archived.length ? 1 : 0;
@@ -485,17 +498,17 @@ async function main(argv) {
   lines.push(`  ${result.added.length} written, ${result.unchanged.length} already archived unchanged` +
     (result.removed.length ? `, ${result.removed.length} removed` : ''));
   for (const { record, path } of result.added) {
-    lines.push(`    + ${record.company} ${record.quarter} -> ${path.replace(`${REPO_ROOT}/`, '')}`);
+    lines.push(`    + ${record.company} ${record.quarter} -> ${shortPath(path)}`);
   }
   for (const { record, path } of result.removed) {
-    lines.push(`    - ${record.company} ${record.quarter} — rejected on re-review, taken out of ${path.replace(`${REPO_ROOT}/`, '')}`);
+    lines.push(`    - ${record.company} ${record.quarter} — rejected on re-review, taken out of ${shortPath(path)}`);
   }
   if (result.collisions.length) {
     lines.push('');
     lines.push(`  ${result.collisions.length} name collision${result.collisions.length === 1 ? '' : 's'} — nothing was overwritten or deleted:`);
     for (const { record, path, occupant, action } of result.collisions) {
       const verb = action === 'remove' ? 'would delete' : 'would land on';
-      lines.push(`    ! ${record.company} ${verb} ${path.replace(`${REPO_ROOT}/`, '')}, which holds ${occupant}`);
+      lines.push(`    ! ${record.company} ${verb} ${shortPath(path)}, which holds ${occupant}`);
     }
     lines.push('    Give one of them a distinguishable name in pipeline/config/companies.mjs.');
   }
@@ -510,7 +523,7 @@ async function main(argv) {
     lines.push('');
     lines.push(`  ${result.changed.length} differ${result.changed.length === 1 ? 's' : ''} from what is archived and ${result.changed.length === 1 ? 'was' : 'were'} left alone:`);
     for (const { record, path } of result.changed) {
-      lines.push(`    ! ${record.company} ${record.quarter} — ${path.replace(`${REPO_ROOT}/`, '')}`);
+      lines.push(`    ! ${record.company} ${record.quarter} — ${shortPath(path)}`);
     }
     lines.push('    An archived quarter changing usually means a restatement or a re-review.');
     lines.push('    Look at the difference, then re-run with --force to accept it.');
@@ -535,7 +548,11 @@ async function main(argv) {
   return result.added.length || result.unchanged.length || result.removed.length ? 0 : 1;
 }
 
-const invokedDirectly = process.argv[1] && import.meta.url === `file://${process.argv[1]}`;
+// Windows gives process.argv[1] as C:\path\to\file.mjs while import.meta.url is
+// file:///C:/path/to/file.mjs, so comparing the two as strings is never true there —
+// and the failure is silent: the CLI exits 0 having done nothing. Compare resolved
+// paths instead, which is what scripts/serve.mjs already did.
+const invokedDirectly = process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url);
 if (invokedDirectly) {
   main(process.argv.slice(2)).then(
     (code) => { process.exitCode = code; },

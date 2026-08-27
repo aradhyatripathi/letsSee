@@ -12,12 +12,25 @@
 
 import { spawn } from 'node:child_process';
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
-import { dirname, join, resolve } from 'node:path';
+import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { COMPANIES } from '../pipeline/config/companies.mjs';
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+
+// A path as the reader should see it: relative to the repo when it is inside it,
+// absolute when it is not.
+//
+// This used to be `path.replace(`${REPO_ROOT}/`, '')`, which is a string operation
+// pretending to be a path one. On Windows the separators do not match, so nothing is
+// stripped and the full path is printed instead — including the user's name and home
+// directory, on screen, in front of whoever they are demonstrating this to. The same
+// leak was fixed in what records store; this is the version that reaches the terminal.
+function shortPath(path) {
+  const rel = relative(REPO_ROOT, path);
+  return rel && !rel.startsWith('..') ? rel : path;
+}
 const OUT_DIR = join(REPO_ROOT, 'demo-output');
 
 // Oldest first. Two quarters rather than one because a single snapshot leaves the
@@ -135,7 +148,7 @@ async function main() {
   say('  no API key — and then refused to treat any of it as trustworthy, because nobody has');
   say('  looked at it yet.');
   say('');
-  say(`${BOLD}Everything is in ${OUT_DIR.replace(`${REPO_ROOT}/`, '')}/${OFF}`);
+  say(`${BOLD}Everything is in ${shortPath(OUT_DIR)}/${OFF}`);
   say(`  records.json              both quarters, all pending review`);
   say('  tyre-sector-DRAFT.pptx    every company starred — unreviewed — plus trend slides');
   say('  tyre-workbook-DRAFT.xlsx  four sheets, every row marked NOT REVIEWED');
@@ -143,7 +156,7 @@ async function main() {
   say('');
   say(`${BOLD}To finish it properly${OFF}`);
   say('  1. npm run serve:dashboard        and open the printed URL');
-  say(`  2. Records -> Restore / import JSON -> ${recordsPath.replace(`${REPO_ROOT}/`, '')}`);
+  say(`  2. Records -> Restore / import JSON -> ${shortPath(recordsPath)}`);
   say('  3. Review tab — every figure sits next to the quote behind it. Approve or reject each.');
   say('     Records tab shows quarter-on-quarter movement now that there are two quarters.');
   say('  4. Export the workbook and the deck. Both default to approved records only.');

@@ -11,7 +11,7 @@
 
 import { readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { dirname, join } from 'node:path';
+import { dirname, join, relative, resolve } from 'node:path';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const DASH_PATH = join(root, 'dashboard/tyre_comparison_dashboard.html');
@@ -75,9 +75,11 @@ function main() {
   }
   for (const b of stale) {
     html = html.replace(b.current, () => b.canonical);
-    console.log(`dashboard ${b.marker} block updated from ${b.source.replace(`${root}/`, '')}`);
+    console.log(`dashboard ${b.marker} block updated from ${relative(root, b.source)}`);
   }
   writeFileSync(DASH_PATH, html, 'utf8');
 }
 
-if (process.argv[1] && import.meta.url === `file://${process.argv[1]}`) main();
+// Resolved paths, not a string built from a URL prefix: on Windows the two never
+// match, so this file would quietly do nothing when run directly.
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) main();
