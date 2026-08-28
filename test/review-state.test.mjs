@@ -167,7 +167,10 @@ test('both halves decide review state with the same rule', async () => {
 test('the CLIs name the file an approval came from', async () => {
   const { approvalSourceNote } = await import('../pipeline/lib/report.mjs');
   const note = approvalSourceNote(3, '/tmp/handed-to-you.json');
-  assert.match(note, /3 approvals read from \/tmp\/handed-to-you\.json/);
+  // The filename only: this prints on screen while somebody demonstrates the tool, and
+  // an absolute path carries their username and home directory with it.
+  assert.match(note, /3 approvals read from handed-to-you\.json/);
+  assert.ok(!note.includes('/tmp/'), 'the note should not carry the directory');
   assert.match(note, /cannot re-check them/);
   assert.equal(approvalSourceNote(0, '/tmp/x.json'), '', 'and says nothing when nothing was approved');
 });

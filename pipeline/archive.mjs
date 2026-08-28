@@ -23,7 +23,7 @@
 
 import { mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
-import { dirname, join, relative, resolve } from 'node:path';
+import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { TyreCore } from './lib/core.mjs';
@@ -41,8 +41,16 @@ const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 // directory, on screen, in front of whoever they are demonstrating this to. The same
 // leak was fixed in what records store; this is the version that reaches the terminal.
 function shortPath(path) {
-  const rel = relative(REPO_ROOT, path);
-  return rel && !rel.startsWith('..') ? rel : path;
+  // Relative to where the command was run, which is what the reader recognises and
+  // what they would type next — and, unlike an absolute path, does not carry their
+  // username onto whatever screen this is printed on. Falls back to the repo when the
+  // archive lives outside the working directory, and to the full path when it is
+  // somewhere else entirely, because a path they cannot find is worse than a long one.
+  for (const base of [process.cwd(), REPO_ROOT]) {
+    const rel = relative(base, path);
+    if (rel && !rel.startsWith('..') && !isAbsolute(rel)) return rel;
+  }
+  return path;
 }
 const DEFAULT_DIR = join(REPO_ROOT, 'archive');
 
@@ -442,7 +450,7 @@ async function main(argv) {
       process.stdout.write(`The archive at ${dir} is empty.\n\nAdd to it with:\n  node pipeline/archive.mjs --records=<path>\n`);
       return 0;
     }
-    process.stdout.write(`${dir}\n  ${archived.length} approved record${archived.length === 1 ? '' : 's'}\n\n`);
+    process.stdout.write(`${shortPath(dir)}\n  ${archived.length} approved record${archived.length === 1 ? '' : 's'}\n\n`);
     for (const [quarter, companies] of summarizeQuarters(archived)) {
       process.stdout.write(`  ${quarter}: ${companies.sort().join(', ')}\n`);
     }
@@ -495,7 +503,7 @@ async function main(argv) {
 
   const result = await addToArchive(records, dir, { force: flags.force === true });
 
-  const lines = [dir];
+  const lines = [shortPath(dir)];
   lines.push(`  ${result.added.length} written, ${result.unchanged.length} already archived unchanged` +
     (result.removed.length ? `, ${result.removed.length} removed` : ''));
   for (const { record, path } of result.added) {

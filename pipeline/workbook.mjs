@@ -9,13 +9,26 @@
 // Approved-only by default, for the same reason the deck is: a workbook circulates.
 
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
-import { dirname, join, resolve } from 'node:path';
+import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { TyreCore } from './lib/core.mjs';
 import { expandHome } from './lib/userpath.mjs';
 import { approvalSourceNote } from './lib/report.mjs';
 import { TyreXlsx } from './lib/xlsx.mjs';
+
+// A path as the person running the command should see it: relative when the file is
+// inside the directory they are standing in, absolute when it is somewhere else.
+//
+// Naming the file you just wrote is the useful thing a tool does. Printing
+// C:\\Users\\<name>\\Desktop\\project\\demo-output\\book.xlsx to do it also puts their
+// username on whatever screen they are presenting from, for no benefit — from inside
+// the project folder, demo-output\\book.xlsx is both shorter and what they will type
+// next.
+function displayPath(path) {
+  const rel = relative(process.cwd(), path);
+  return rel && !rel.startsWith('..') && !isAbsolute(rel) ? rel : path;
+}
 
 const USAGE = `
 Build the four-sheet workbook from reviewed records.
@@ -119,9 +132,15 @@ async function main(argv) {
   const bytes = TyreXlsx.writeXlsx(model);
   await writeFile(outPath, bytes);
 
-  const unreviewed = model.sheets[0].aoa.slice(1).filter((row) => row[2] === 'NOT REVIEWED').length;
+  // By name, not position. This counted rows on model.sheets[0], which stopped being
+  // Core Financials the day an "About this file" sheet was added in front of it — so it
+  // found no unreviewed rows, and the line below then reported every record as an
+  // approval. A demo printed "14 approvals read from ..." over fourteen pending
+  // records, which is the exact kind of false claim this project exists to refuse.
+  const core = model.sheets.find((sheet) => sheet.name === 'Core Financials');
+  const unreviewed = core ? core.aoa.slice(1).filter((row) => row[2] === 'NOT REVIEWED').length : model.generated_for;
   process.stdout.write(
-    `${outPath}\n` +
+    `${displayPath(outPath)}\n` +
     `  ${model.sheets.length} sheets · ${(bytes.length / 1024).toFixed(0)} KB\n` +
     `  ${model.generated_for} record${model.generated_for === 1 ? '' : 's'} · ${model.comments.length} cell comments carrying the source quote\n` +
     approvalSourceNote(model.generated_for - unreviewed, recordsPath) +

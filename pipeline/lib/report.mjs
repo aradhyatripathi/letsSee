@@ -630,8 +630,13 @@ function kvTable(pairs) {
  */
 export function approvalSourceNote(count, path) {
   if (!count) return '';
+  // The filename, not the whole path. This line prints on screen while somebody is
+  // demonstrating the tool, and an absolute path carries their username and home
+  // directory with it — the same leak that was closed in what records store and in
+  // the archive's own output, reappearing in a third place.
+  const shown = String(path == null ? '' : path).split(/[\\/]/).pop() || path;
   return [
-    `  ${count} approval${count === 1 ? '' : 's'} read from ${path}.`,
+    `  ${count} approval${count === 1 ? '' : 's'} read from ${shown}.`,
     '  Approvals are made in the dashboard; this reads what the file records about them',
     '  and cannot re-check them.',
     ''
