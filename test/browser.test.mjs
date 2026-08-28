@@ -498,3 +498,97 @@ test('nothing on the page can send data anywhere but the Anthropic API', { skip 
     await new Promise((r) => collector.close(r));
   }
 });
+
+/* --------------------------------------------------- the offline dashboard -- */
+
+// Two of the seven tabs were nothing but charts, and the chart library comes from a
+// CDN — so on the machine this tool is built for, "Dashboard" and "Competitive
+// analysis" were a column of apology boxes and no figures at all. The numbers were
+// there the whole time, one layer down.
+test('the chart tabs show the figures when the charts cannot be drawn', { skip }, async () => {
+  await withPage(async (page) => {
+    await page.click('#load-sample-records');
+    await page.waitForFunction(() => records.length > 0);
+
+    for (const tab of ['dashboard', 'compete']) {
+      await page.click(`[data-tab="${tab}"]`);
+      const seen = await page.evaluate((t) => {
+        const panel = document.getElementById('panel-' + t);
+        return {
+          tables: panel.querySelectorAll('.chart-table').length,
+          cells: panel.querySelectorAll('.chart-table td').length,
+          chartsWithNothing: [...panel.querySelectorAll('.chart-missing')].filter((e) => !e.querySelector('.chart-table')).length,
+          notices: panel.querySelectorAll('.chart-notice').length
+        };
+      }, tab);
+
+      assert.ok(seen.tables >= 3, `${tab} rendered only ${seen.tables} tables`);
+      assert.ok(seen.cells > 20, `${tab} rendered ${seen.cells} figures`);
+      assert.equal(seen.chartsWithNothing, 0, `${tab} still has a chart showing nothing`);
+      // Why the charts are missing is one fact about the page, not one per chart.
+      assert.equal(seen.notices, 1, `${tab} explains it ${seen.notices} times`);
+    }
+  });
+});
+
+// The Competitive tab started with no companies selected, so the first thing anyone
+// saw on it was seven empty boxes — explained by a message about a chart library,
+// which was not why they were empty.
+test('the comparison tab arrives with companies already selected', { skip }, async () => {
+  await withPage(async (page) => {
+    await page.click('#load-sample-records');
+    await page.waitForFunction(() => records.length > 0);
+    await page.click('[data-tab="compete"]');
+
+    const on = await page.$$eval('#compete-chips .chip.on', (els) => els.map((e) => e.textContent));
+    assert.ok(on.length >= 2, `only ${on.length} companies selected on arrival`);
+
+    // But it is a starting point, not a policy: deselecting everything sticks.
+    await page.$$eval('#compete-chips .chip.on', (els) => els.forEach((e) => e.click()));
+    await page.click('[data-tab="records"]');
+    await page.click('[data-tab="compete"]');
+    assert.equal((await page.$$('#compete-chips .chip.on')).length, 0, 'a deliberate empty selection was overridden');
+  });
+});
+
+// Getting from an empty page to a working demonstration used to be: run the pipeline,
+// find demo-output/records.json on disk, use a file picker. Three steps, the last of
+// which means opening a file dialog in front of an audience.
+test('one click goes from an empty page to reviewable records', { skip }, async () => {
+  await withPage(async (page, errors) => {
+    assert.equal(await page.evaluate(() => document.querySelector('.tab.active').dataset.tab), 'records',
+      'an empty dashboard should land where the sample is offered, not on a blank form');
+
+    // The export controls are hidden while there is nothing to export.
+    assert.equal(await page.evaluate(() => getComputedStyle(document.getElementById('records-tools')).display), 'none');
+
+    await page.click('#load-sample-records');
+    await page.waitForFunction(() => records.length > 0);
+
+    assert.equal(await page.evaluate(() => document.querySelector('.tab.active').dataset.tab), 'review',
+      'loading the sample should land on the screen this design exists to produce');
+    assert.equal(await page.evaluate(() => records.every((r) => r.review.status === 'pending')), true,
+      'a sample that loaded itself pre-approved would teach the wrong lesson');
+    assert.equal(await page.evaluate(() => getComputedStyle(document.getElementById('records-tools')).display) === 'none', false,
+      'the export controls should come back once there is data');
+
+    // Every sample record is a fixture, which is what makes the outputs say so.
+    assert.equal(await page.evaluate(() => records.every((r) => /^fixture:/.test(r.source))), true);
+    assert.deepEqual(errors, []);
+  });
+});
+
+// It has to work with no server at all, because that is how someone opens a file
+// their colleague sent them.
+test('the sample is bundled in the page, not fetched', { skip }, async () => {
+  const { readFileSync } = await import('node:fs');
+  const html = readFileSync(new URL('../dashboard/tyre_comparison_dashboard.html', import.meta.url), 'utf8');
+  assert.match(html, /TYRE-SAMPLE:BEGIN/, 'the sample block is inlined');
+  assert.match(html, /window\.TYRE_SAMPLE_RECORDS/, 'and exported past the block IIFE');
+
+  await withPage(async (page) => {
+    // No route is allowed out at all in these tests, so reaching records at all proves
+    // it came from the page.
+    assert.ok(await page.evaluate(() => SAMPLE_RECORDS.length) >= 7);
+  });
+});

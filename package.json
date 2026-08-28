@@ -18,7 +18,8 @@
     "demo": "node scripts/demo.mjs",
     "workbook": "node pipeline/workbook.mjs",
     "test:browser": "node --test test/browser.test.mjs",
-    "pin:cdn": "node scripts/pin-cdn.mjs"
+    "pin:cdn": "node scripts/pin-cdn.mjs",
+    "make:sample": "node scripts/make-sample.mjs"
   },
   "license": "MIT"
 }
