@@ -16,13 +16,26 @@
 // company with an asterisk on every slide it appears on.
 
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
-import { dirname, resolve, join } from 'node:path';
+import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { TyreCore } from './lib/core.mjs';
 import { expandHome } from './lib/userpath.mjs';
 import { approvalSourceNote } from './lib/report.mjs';
 import { TyreDeck } from './lib/deck.mjs';
+
+// A path as the person running the command should see it: relative when the file is
+// inside the directory they are standing in, absolute when it is somewhere else.
+//
+// Naming the file you just wrote is the useful thing a tool does. Printing
+// C:\\Users\\<name>\\Desktop\\project\\demo-output\\book.xlsx to do it also puts their
+// username on whatever screen they are presenting from, for no benefit — from inside
+// the project folder, demo-output\\book.xlsx is both shorter and what they will type
+// next.
+function displayPath(path) {
+  const rel = relative(process.cwd(), path);
+  return rel && !rel.startsWith('..') && !isAbsolute(rel) ? rel : path;
+}
 
 const USAGE = `
 Build the sector deck from reviewed records.
@@ -144,7 +157,7 @@ async function main(argv) {
 
   const p = model.provenance;
   process.stdout.write(
-    `${outPath}\n` +
+    `${displayPath(outPath)}\n` +
     `  ${model.slides.length} slides · ${(bytes.length / 1024).toFixed(0)} KB\n` +
     `  ${p.total} compan${p.total === 1 ? 'y' : 'ies'}: ${p.approved} approved${p.pending ? `, ${p.pending} pending (marked *)` : ''}\n` +
     approvalSourceNote(p.approved, recordsPath) +

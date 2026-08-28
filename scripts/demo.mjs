@@ -133,7 +133,7 @@ async function main() {
   const wbPath = join(OUT_DIR, 'tyre-workbook-DRAFT.xlsx');
   const workbook = await run(['pipeline/workbook.mjs', `--records=${recordsPath}`, `--out=${wbPath}`, '--include-pending']);
   say(workbook.out.split('\n').filter(Boolean).map((l) => `  ${l.trim()}`).join('\n'));
-  say(`  ${DIM}Four sheets, and every figure's cell carries the quote behind it as a comment.${OFF}`);
+  say(`  ${DIM}Every populated figure's cell carries the quote behind it as a comment.${OFF}`);
 
   step(5, TOTAL, 'Try to archive it — and watch it refuse');
   const archive = await run(['pipeline/archive.mjs', `--records=${recordsPath}`, `--dir=${join(OUT_DIR, 'archive')}`]);
@@ -151,7 +151,7 @@ async function main() {
   say(`${BOLD}Everything is in ${shortPath(OUT_DIR)}/${OFF}`);
   say(`  records.json              both quarters, all pending review`);
   say('  tyre-sector-DRAFT.pptx    every company starred — unreviewed — plus trend slides');
-  say('  tyre-workbook-DRAFT.xlsx  four sheets, every row marked NOT REVIEWED');
+  say('  tyre-workbook-DRAFT.xlsx  every row marked NOT REVIEWED, and a front sheet saying the figures are invented');
   say('  report.md is in the run directory printed above');
   say('');
   say(`${BOLD}To finish it properly${OFF}`);

@@ -160,3 +160,53 @@ test('the demo runs end to end and produces both artefacts', () => {
     assert.match(all, marker, 'the demo did not mention one of its own outputs');
   }
 });
+
+// A tool must never report approvals it does not have.
+//
+// This was a live wrong claim: the workbook counted unreviewed rows on
+// `model.sheets[0]`, which stopped being Core Financials the day an "About this file"
+// sheet was added in front of it. It then found no unreviewed rows and reported every
+// record as an approval — "14 approvals read from records.json" printed over fourteen
+// pending records, in a demonstration, on screen. Position-based lookup again; the
+// same mistake the workbook tests had, in the one place it could print a falsehood.
+test('a workbook of unreviewed records claims no approvals', (t) => {
+  const dir = tempDir(t);
+  const records = approvedRecordsFile(dir);
+  const pending = JSON.parse(readFileSync(records, 'utf8'));
+  pending.records[0].review = { status: 'pending', reviewer: null, reviewed_at: null, note: null };
+  const path = join(dir, 'pending.json');
+  writeFileSync(path, JSON.stringify(pending), 'utf8');
+
+  const out = join(dir, 'draft.xlsx');
+  const { code, all } = run('pipeline/workbook.mjs', [`--records=${path}`, `--out=${out}`, '--include-pending']);
+  assert.equal(code, 0, all);
+
+  assert.doesNotMatch(all, /\d+ approvals? read from/, 'it reported approvals for records nobody approved');
+  assert.match(all, /NOT REVIEWED/, 'and it should say the draft is unreviewed');
+
+  // The approved case still says so, so this is not passing by never mentioning them.
+  const approvedOut = join(dir, 'approved.xlsx');
+  const approved = run('pipeline/workbook.mjs', [`--records=${records}`, `--out=${approvedOut}`]);
+  assert.equal(approved.code, 0, approved.all);
+  assert.match(approved.all, /1 approval read from/);
+});
+
+// Anything a tool prints may be on a projector. The absolute path carried the
+// operator's username and home directory; it had already been removed from what
+// records store and from the archive's output, and was still here.
+test('no tool prints the operator\'s home directory', (t) => {
+  const dir = tempDir(t);
+  const records = approvedRecordsFile(dir);
+
+  for (const [script, args] of [
+    ['pipeline/workbook.mjs', [`--records=${records}`, `--out=${join(dir, 'w.xlsx')}`]],
+    ['pipeline/deck.mjs', [`--records=${records}`, `--out=${join(dir, 'd.pptx')}`]],
+    ['pipeline/archive.mjs', [`--records=${records}`, `--dir=${join(dir, 'archive')}`]]
+  ]) {
+    // Run from inside the directory, which is how a person runs these: from the
+    // project folder. Naming the file it wrote is the tool's job; doing it with an
+    // absolute path is what puts a username on screen.
+    const { all } = run(script, args.map((a) => a.replace(dir + '/', '')), { cwd: dir });
+    assert.ok(!all.includes(dir), `${script} printed the full working path:\n${all}`);
+  }
+});
