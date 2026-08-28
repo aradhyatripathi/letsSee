@@ -10,8 +10,10 @@
 
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import { TyreCore } from './lib/core.mjs';
+import { expandHome } from './lib/userpath.mjs';
 import { approvalSourceNote } from './lib/report.mjs';
 import { TyreXlsx } from './lib/xlsx.mjs';
 
@@ -57,12 +59,6 @@ function parseArgs(argv) {
     flags[name] = value;
   }
   return flags;
-}
-
-function expandHome(path) {
-  if (path === '~') return process.env.HOME || path;
-  if (path.startsWith('~/') && process.env.HOME) return join(process.env.HOME, path.slice(2));
-  return path;
 }
 
 /** Accept a run payload, a dashboard export, or a bare array. */
@@ -134,7 +130,11 @@ async function main(argv) {
   return 0;
 }
 
-const invokedDirectly = process.argv[1] && import.meta.url === `file://${process.argv[1]}`;
+// Windows gives process.argv[1] as C:\path\to\file.mjs while import.meta.url is
+// file:///C:/path/to/file.mjs, so comparing the two as strings is never true there —
+// and the failure is silent: the CLI exits 0 having done nothing. Compare resolved
+// paths instead, which is what scripts/serve.mjs already did.
+const invokedDirectly = process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url);
 if (invokedDirectly) {
   main(process.argv.slice(2)).then(
     (code) => { process.exitCode = code; },

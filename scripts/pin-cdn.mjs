@@ -97,7 +97,11 @@ async function pin() {
   return 0;
 }
 
-const invokedDirectly = process.argv[1] && import.meta.url === `file://${process.argv[1]}`;
+// Windows gives process.argv[1] as C:\path\to\file.mjs while import.meta.url is
+// file:///C:/path/to/file.mjs, so comparing the two as strings is never true there —
+// and the failure is silent: the CLI exits 0 having done nothing. Compare resolved
+// paths instead, which is what scripts/serve.mjs already did.
+const invokedDirectly = process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url);
 if (invokedDirectly) {
   (process.argv.includes('--check') ? check() : pin()).then(
     (code) => { process.exitCode = code; },

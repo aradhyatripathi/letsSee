@@ -15,13 +15,15 @@ import { fixturePath } from '../pipeline/fixtures/index.mjs';
 import { extractRecordOffline } from '../pipeline/lib/extract.mjs';
 
 const DASH = '—';
-const SHEET_ORDER = ['Core Financials', 'Segments', 'Outlook', 'Sources & Quotes'];
+// 'About this file' leads, because a workbook gets forwarded and opens on its first
+// sheet in front of someone who was not in the room.
+const SHEET_ORDER = ['About this file', 'Core Financials', 'Segments', 'Outlook', 'Sources & Quotes'];
 
 // Company, Quarter, Currency, Unit, Source come before the metric columns.
 // Derived rather than hardcoded so adding a metadata column cannot silently
 // shift what this file believes it is asserting on.
 const METRIC_COLUMN_OFFSET =
-  TyreCore.buildWorkbookModel([]).sheets[0].aoa[0].length - TyreCore.CORE_METRICS.length;
+  TyreCore.buildWorkbookModel([]).sheets.find((s) => s.name === 'Core Financials').aoa[0].length - TyreCore.CORE_METRICS.length;
 
 function fixtureRecord(id, company) {
   const result = extractRecordOffline({
@@ -259,11 +261,16 @@ test('reviewedOnly filters to approved records', () => {
   const model = TyreCore.buildWorkbookModel([approved, rejected, pending], { reviewedOnly: true });
 
   assert.equal(model.generated_for, 1);
-  for (const s of model.sheets) {
+  // Every sheet that lists records — 'About this file' describes the file itself, so
+  // its rows are labels rather than companies.
+  for (const s of model.sheets.filter((sh) => sh.name !== 'About this file')) {
     assert.deepEqual(s.aoa.slice(1).map((r) => r[s.name === 'Sources & Quotes' ? 1 : 0]).filter((v, i, a) => a.indexOf(v) === i), [
       approved.company
     ], `${s.name} shows only the approved record`);
   }
+  // And the About sheet reports the same count it filtered to.
+  const about = sheet(model, 'About this file').aoa;
+  assert.ok(about.some((r) => r[0] === 'Records' && r[1] === '1'), 'the About sheet miscounts');
   for (const comment of model.comments) {
     assert.ok(comment.ref.startsWith(`${approved.company}|`));
   }
@@ -273,7 +280,7 @@ test('reviewedOnly filters to approved records', () => {
   // threw out must not travel onward in the deliverable, whatever the toggle says.
   const unfiltered = TyreCore.buildWorkbookModel([approved, rejected, pending]);
   assert.equal(unfiltered.generated_for, 2, 'reviewedOnly off adds pending records, not rejected ones');
-  const companies = unfiltered.sheets[0].aoa.slice(1).map((r) => r[0]);
+  const companies = sheet(unfiltered, 'Core Financials').aoa.slice(1).map((r) => r[0]);
   assert.ok(companies.includes(approved.company) && companies.includes(pending.company));
   assert.ok(!companies.includes(rejected.company), 'a rejected record is withheld from every sheet');
   assert.ok(

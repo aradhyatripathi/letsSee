@@ -14,7 +14,7 @@ import assert from 'node:assert/strict';
 
 import { TyreCore } from '../pipeline/lib/core.mjs';
 import { TyreXlsx } from '../pipeline/lib/xlsx.mjs';
-import { assertContentTypesCover, assertPackageWellFormed, assertRelationshipsResolve, unzip } from './ooxml-helpers.mjs';
+import { assertContentTypesCover, assertPackageWellFormed, assertRelationshipsResolve, sheetNamed, unzip } from './ooxml-helpers.mjs';
 
 function record(over = {}) {
   const base = {
@@ -63,7 +63,7 @@ test('the package is one a spreadsheet reader can open', () => {
 
 test('numbers stay numbers and text stays text', () => {
   const files = build([approved('CEAT')], {});
-  const sheet = files.get('xl/worksheets/sheet1.xml');
+  const sheet = sheetNamed(files, 'Core Financials');
 
   // A figure has to be a number, or the spreadsheet cannot sum or chart it.
   assert.match(sheet, /<c r="G2" s="\d+"><v>100<\/v><\/c>/, 'revenue is a numeric cell');
@@ -82,7 +82,7 @@ test('an unreported figure is the em dash, never a zero', () => {
   }, { source: 'fixture:sparse.txt' });
   sparse.review = { status: 'approved', reviewer: 'P', reviewed_at: 'x', note: null };
 
-  const sheet = build([sparse], {}).get('xl/worksheets/sheet1.xml');
+  const sheet = sheetNamed(build([sparse], {}), 'Core Financials');
   assert.match(sheet, /<t[^>]*>—<\/t>/, 'unreported figures render as the em dash');
   assert.ok(!/<v>0<\/v>/.test(sheet), 'and never as a zero');
 });
@@ -92,9 +92,13 @@ test('every cell comment carries its quote and lands on the right cell', () => {
   const files = build([approved('CEAT'), approved('MRF')], {});
 
   assert.ok(model.comments.length > 20, 'the fixtures produce a real number of comments');
-  const comments = files.get('xl/comments1.xml');
+  // Numbered per sheet, so the part's name follows Core Financials' position rather
+  // than being fixed — the same reason the sheets themselves are looked up by name.
+  const commentsPart = [...files.keys()].find((n) => /^xl\/comments\d+\.xml$/.test(n));
+  const comments = files.get(commentsPart);
   assert.ok(comments, 'the comments part exists');
-  assert.ok(files.has('xl/drawings/vmlDrawing1.vml'), 'and the shape part a reader wants alongside it');
+  assert.ok([...files.keys()].some((n) => /^xl\/drawings\/vmlDrawing\d+\.vml$/.test(n)),
+    'and the shape part a reader wants alongside it');
 
   for (const comment of model.comments) {
     assert.ok(comments.includes(`ref="${comment.addr}"`), `no comment on ${comment.addr}`);
@@ -107,14 +111,14 @@ test('every cell comment carries its quote and lands on the right cell', () => {
   assert.ok(comments.includes('the span supporting revenue'), 'and its quote is in the part');
 
   // The sheet must point at the drawing, or the notes are invisible.
-  assert.match(files.get('xl/worksheets/sheet1.xml'), /<legacyDrawing r:id="rIdVml"\/>/);
+  assert.match(sheetNamed(files, 'Core Financials'), /<legacyDrawing r:id="rIdVml"\/>/);
 });
 
 test('column widths and the frozen header survive', () => {
   const files = build([approved('CEAT')], {});
-  const sheet = files.get('xl/worksheets/sheet1.xml');
+  const sheet = sheetNamed(files, 'Core Financials');
   const model = TyreCore.buildWorkbookModel([approved('CEAT')], {});
-  assert.equal((sheet.match(/<col /g) || []).length, model.sheets[0].widths.length);
+  assert.equal((sheet.match(/<col /g) || []).length, model.sheets.find((sh) => sh.name === 'Core Financials').widths.length);
   assert.match(sheet, /<pane[^>]*state="frozen"/, 'the header row stays put when scrolling');
 });
 
@@ -138,7 +142,7 @@ test('a company name full of XML metacharacters cannot break the package', () =>
   const files = build([approved(nasty)], {});
   assertPackageWellFormed(files);
 
-  const sheet = files.get('xl/worksheets/sheet1.xml');
+  const sheet = sheetNamed(files, 'Core Financials');
   assert.match(sheet, /A &amp; B &lt;Tyres&gt;/, 'the name survives, escaped');
   assert.ok(!sheet.includes('￿'), 'and the character XML cannot carry is gone');
 });
@@ -156,7 +160,7 @@ test('recordsToXlsx goes from records to bytes in one call, and obeys the review
   const bytes = TyreXlsx.recordsToXlsx([approved('CEAT'), pending('MRF')], { reviewedOnly: true });
   assert.deepEqual([...bytes.subarray(0, 4)], [0x50, 0x4b, 0x03, 0x04], 'it is a ZIP');
 
-  const sheet = unzip(bytes).get('xl/worksheets/sheet1.xml');
+  const sheet = sheetNamed(unzip(bytes), 'Core Financials');
   assert.match(sheet, /CEAT/);
   assert.ok(!sheet.includes('MRF'), 'an unapproved record is not in an approved-only workbook');
 });
@@ -205,7 +209,7 @@ test('no cell is longer than Excel will accept', () => {
       assert.ok(text.length <= TyreXlsx.MAX_CELL_CHARS + 200, `a cell in ${name} holds ${text.length} characters`);
     }
   }
-  assert.match(files.get('xl/worksheets/sheet1.xml'), /…\[clipped]<\/t>/, 'the sheet cell says it was cut');
+  assert.match(sheetNamed(files, 'Outlook'), /…\[clipped]<\/t>/, 'the sheet cell says it was cut');
   assert.match(files.get('xl/comments1.xml'), /…\[clipped]<\/t>/, 'and so does the comment');
 });
 

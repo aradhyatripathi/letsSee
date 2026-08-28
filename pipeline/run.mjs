@@ -16,6 +16,7 @@ import { fileURLToPath } from 'node:url';
 
 import { COMPANIES, QUARTER_DEFAULT, findCompany, selectCompanies } from './config/companies.mjs';
 import { TyreCore } from './lib/core.mjs';
+import { expandHome } from './lib/userpath.mjs';
 import { extractRecord, extractRecordFromResponse, extractRecordOffline } from './lib/extract.mjs';
 import { retrieveFiling } from './lib/retrieve.mjs';
 import { countFinancialMarkers, countNumbers, summarizeForConsole, writeRunReport } from './lib/report.mjs';
@@ -222,12 +223,6 @@ function parsePerCompanyPaths(specs, flagName, companies) {
     out.set(company.id, expandHome(path));
   }
   return out;
-}
-
-function expandHome(path) {
-  if (path === '~') return process.env.HOME || path;
-  if (path.startsWith('~/') && process.env.HOME) return join(process.env.HOME, path.slice(2));
-  return path;
 }
 
 /* --------------------------------------------------------------- one company -- */

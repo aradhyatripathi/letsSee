@@ -114,3 +114,31 @@ export function assertContentTypesCover(files) {
     );
   }
 }
+
+/**
+ * The worksheet part for the sheet whose tab reads `name`.
+ *
+ * Addressing sheets as sheet1.xml ties every assertion to the order they happen to be
+ * in today — a sheet added at the front silently repoints ten tests at the wrong data,
+ * and they fail in ways that look like the writer broke. The workbook part maps names
+ * to relationship ids and the rels part maps those to files, which is how a reader
+ * does it, so that is how the tests do it.
+ */
+export function sheetNamed(files, name) {
+  const workbook = files.get('xl/workbook.xml');
+  assert.ok(workbook, 'xl/workbook.xml is present');
+  const escaped = name.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+  const entry = [...workbook.matchAll(/<sheet name="([^"]+)"[^>]*r:id="([^"]+)"/g)]
+    .find(([, sheetName]) => sheetName === escaped);
+  assert.ok(entry, `no sheet named ${name} — the workbook has ${[...workbook.matchAll(/<sheet name="([^"]+)"/g)].map((m) => m[1]).join(', ')}`);
+
+  const rels = files.get('xl/_rels/workbook.xml.rels');
+  const target = new RegExp(`Id="${entry[2]}"[^>]*Target="([^"]+)"`).exec(rels);
+  assert.ok(target, `${entry[2]} has no relationship target`);
+
+  const path = `xl/${target[1].replace(/^\.\//, '')}`;
+  const xml = files.get(path);
+  assert.ok(xml, `${name} points at ${path}, which is not in the package`);
+  return xml;
+}
