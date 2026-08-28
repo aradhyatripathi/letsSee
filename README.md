@@ -190,6 +190,7 @@ carries its review state either way.
 | `npm test` | Node's built-in test runner over `test/`. Offline. |
 | `npm run test:browser` | Just the tests that drive the dashboard in a real browser. Skipped by `npm test` when Playwright is not installed, so the suite still runs anywhere with nothing installed. |
 | `npm run pin:cdn` | Pin the dashboard's two CDN scripts by hash. Needs to reach cdnjs; `-- --check` reports whether they are pinned without any network. |
+| `npm run make:sample` | Regenerate the records the dashboard offers behind **Load sample data**, from the fixtures. Run `npm run sync:core` afterwards to inline them. |
 | `npm run serve:dashboard` | Static server for `dashboard/`. `--port=N` to move off 8080; `--dir=<path>` must stay inside the repo. |
 | `npm run sync:core` | Re-inlines the shared source blocks into the dashboard. |
 | `npm run check:core` | Exits 1 if the dashboard's copies have drifted. Also asserted by `npm test` and in CI. |
