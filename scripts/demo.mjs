@@ -156,9 +156,14 @@ async function main() {
   say('');
   say(`${BOLD}To finish it properly${OFF}`);
   say('  1. npm run serve:dashboard        and open the printed URL');
-  say(`  2. Records -> Restore / import JSON -> ${shortPath(recordsPath)}`);
-  say('  3. Review tab — every figure sits next to the quote behind it. Approve or reject each.');
-  say('     Records tab shows quarter-on-quarter movement now that there are two quarters.');
+  say('     The window will sit there looking frozen. That is the server running.');
+  // The page bundles these same records behind a button, so the old instruction —
+  // find records.json on disk and use the file picker — is now the long way round,
+  // and it is the step people were fumbling in front of an audience.
+  say('  2. Click "Load sample data". It lands you on Review with everything pending.');
+  say(`     (Or import ${shortPath(recordsPath)} yourself, on the Records tab.)`);
+  say('  3. Review — every figure sits next to the quote behind it. Approve or reject each.');
+  say('     Records shows quarter-on-quarter movement now that there are two quarters.');
   say('  4. Export the workbook and the deck. Both default to approved records only.');
   say(`  5. ${DIM}npm run archive -- --records=<your export>${OFF}  to keep the quarter.`);
   say('');
